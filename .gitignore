@@ -1,0 +1,5 @@
+# large renders — over GitHub file limits
+*.mp4
+*.webm
+.playwright-mcp/
+.DS_Store

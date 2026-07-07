@@ -1,0 +1,2408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mangalore Atlas — 3D World</title>
+<script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<style>
+  :root {
+    --panel: rgba(255, 255, 255, 0.96);
+    --dark: #1c2733;
+    --accent: #ff8a3d;
+    --muted: #6b7a88;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; background: #a8d8ef; color: var(--dark); -webkit-user-select: none; user-select: none; }
+  #search { -webkit-user-select: text; user-select: text; }
+  #scene { position: absolute; inset: 0; }
+  #labels { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+
+  .pill {
+    position: absolute; transform: translate(-50%, -130%);
+    background: var(--panel); border-radius: 10px; padding: 5px 10px 5px 7px;
+    font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer;
+    box-shadow: 0 2px 8px rgba(20,40,60,0.25), 0 0 0 1px rgba(20,40,60,0.06);
+    pointer-events: auto; display: flex; align-items: center; gap: 5px;
+    transition: box-shadow 0.15s;
+  }
+  .pill:hover { box-shadow: 0 4px 14px rgba(20,40,60,0.35), 0 0 0 2px var(--accent); z-index: 5; }
+  .pill .ic { font-size: 13px; }
+  .area {
+    position: absolute; transform: translate(-50%, -50%); pointer-events: none;
+    color: #6f7a84; font-size: 10px; font-weight: 700; letter-spacing: 2.5px;
+    text-shadow: 0 1px 3px rgba(255,255,255,0.7); white-space: nowrap;
+  }
+  .pill::after {
+    content: ""; position: absolute; left: 50%; bottom: -5px; transform: translateX(-50%);
+    border: 5px solid transparent; border-top-color: var(--panel); border-bottom: none;
+  }
+
+  #sidebar {
+    position: absolute; top: 0; left: 0; bottom: 0; width: 320px; z-index: 10;
+    background: var(--panel); backdrop-filter: blur(10px);
+    display: flex; flex-direction: column;
+    border-right: 1px solid rgba(20,40,60,0.1);
+    transition: transform 0.25s ease;
+  }
+  #sidebar.hidden { transform: translateX(-100%); }
+  #sidebar header { padding: 16px 16px 8px; }
+  #sidebar h1 { font-size: 20px; }
+  #sidebar h1 span { color: var(--accent); }
+  #sidebar .sub { font-size: 11.5px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
+
+  #search {
+    margin: 8px 16px; padding: 9px 12px; border-radius: 8px;
+    border: 1px solid rgba(20,40,60,0.15); background: #fff; color: var(--dark);
+    font-size: 13px; outline: none;
+  }
+  #search:focus { border-color: var(--accent); }
+
+  #filters { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 16px 8px; }
+  .chip {
+    font-size: 11px; padding: 4px 9px; border-radius: 999px; cursor: pointer;
+    border: 1px solid rgba(20,40,60,0.2); background: transparent; color: var(--muted);
+    user-select: none; transition: all 0.15s;
+  }
+  .chip.active { color: #fff; font-weight: 600; border-color: transparent; }
+
+  #list { flex: 1; overflow-y: auto; padding: 4px 8px 8px; }
+  .item { padding: 8px 10px; border-radius: 8px; cursor: pointer; display: flex; gap: 10px; align-items: center; }
+  .item:hover { background: rgba(20,40,60,0.06); }
+  .item .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .item .add {
+    flex-shrink: 0; width: 24px; height: 24px; border-radius: 7px; cursor: pointer;
+    border: 1px solid rgba(20,40,60,0.2); background: transparent; color: var(--muted);
+    font-size: 14px; line-height: 1; display: none;
+  }
+  .item:hover .add { display: block; }
+  .item .add:hover { border-color: var(--accent); color: var(--accent); }
+  .item .add.in { display: block; border-color: transparent; color: #2e7d32; font-weight: 700; }
+  .item .name { font-size: 13px; }
+  .item .cat { font-size: 10.5px; color: var(--muted); }
+
+  #trip { border-top: 1px solid rgba(20,40,60,0.1); padding: 10px 16px 14px; max-height: 34%; overflow-y: auto; }
+  #trip h2 { font-size: 13px; color: var(--accent); margin-bottom: 6px; }
+  #trip .empty { font-size: 11.5px; color: var(--muted); }
+  .trip-item { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 4px 0; }
+  .trip-item .n { flex: 1; cursor: pointer; }
+  .trip-item .n:hover { color: var(--accent); }
+  .trip-item .x { cursor: pointer; color: var(--muted); padding: 0 4px; }
+  .trip-item .x:hover { color: #e53935; }
+  #trip .trip-btns { display: flex; gap: 8px; margin-top: 8px; }
+  #trip button {
+    flex: 1; background: var(--accent); border: none; border-radius: 7px; padding: 7px 0;
+    font-size: 12px; font-weight: 700; cursor: pointer; color: #fff;
+  }
+  #trip button.ghost { background: transparent; border: 1px solid rgba(20,40,60,0.2); color: var(--muted); }
+
+  #toggle {
+    position: absolute; top: 12px; left: 332px; z-index: 11;
+    background: var(--panel); color: var(--dark); border: 1px solid rgba(20,40,60,0.15);
+    border-radius: 8px; padding: 8px 11px; cursor: pointer; font-size: 14px;
+    transition: left 0.25s ease;
+  }
+  #toggle.shifted { left: 12px; }
+
+  #controls { position: absolute; bottom: 58px; right: 12px; z-index: 10; display: flex; flex-direction: column; gap: 8px; }
+  #controls button {
+    background: var(--panel); color: var(--dark); border: 1px solid rgba(20,40,60,0.15);
+    border-radius: 8px; padding: 8px 12px; cursor: pointer; font-size: 12px; font-weight: 600;
+  }
+  #controls button:hover { border-color: var(--accent); }
+
+  #card {
+    position: absolute; right: 12px; top: 12px; width: 290px; z-index: 12;
+    background: var(--panel); border-radius: 14px; padding: 16px;
+    box-shadow: 0 8px 30px rgba(20,40,60,0.3); display: none;
+  }
+  #card .c-title { font-weight: 800; font-size: 15px; padding-right: 18px; }
+  #card .c-cat { font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px; margin: 3px 0 7px; font-weight: 700; }
+  #card .c-desc { font-size: 12.5px; color: #40505e; line-height: 1.5; }
+  #card .c-fact {
+    font-size: 11.5px; margin-top: 9px; padding: 8px 10px; background: rgba(255,138,61,0.1);
+    border-left: 3px solid var(--accent); border-radius: 4px; line-height: 1.45; color: #533a22;
+  }
+  #card .c-add {
+    margin-top: 10px; width: 100%; background: var(--accent); color: #fff; border: none;
+    border-radius: 8px; padding: 8px 0; font-size: 12.5px; font-weight: 700; cursor: pointer;
+  }
+  #card .c-add:disabled { background: rgba(20,40,60,0.15); color: var(--muted); cursor: default; }
+  #card .c-close { position: absolute; right: 10px; top: 8px; cursor: pointer; color: var(--muted); font-size: 16px; }
+
+  #credit {
+    position: absolute; right: 12px; bottom: 18px; z-index: 10;
+    display: flex; align-items: center; gap: 6px;
+    background: var(--panel); border: 1px solid rgba(20,40,60,0.12); border-radius: 999px;
+    padding: 6px 13px; font-size: 11px; color: var(--muted);
+    box-shadow: 0 2px 8px rgba(20,40,60,0.15);
+  }
+  #credit a { display: flex; align-items: center; gap: 5px; color: var(--muted); text-decoration: none; transition: color 0.15s; }
+  #credit a:hover { color: var(--accent); }
+  #credit a:hover strong { color: var(--accent); }
+  #credit strong { color: var(--dark); font-weight: 700; }
+  #credit .sep { color: rgba(20,40,60,0.25); }
+  #tripbar {
+    position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%);
+    z-index: 13; display: none; align-items: center; gap: 10px;
+    background: rgba(18, 26, 34, 0.92); color: #f2ede4; border-radius: 12px;
+    padding: 10px 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); backdrop-filter: blur(8px);
+  }
+  #tripbar.on { display: flex; }
+  #tripbar .t-label { font-size: 13px; font-weight: 700; margin-right: 4px; }
+  #tripbar .s-btn {
+    background: rgba(255,255,255,0.08); color: #f2ede4; border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 8px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; font-weight: 600;
+  }
+  #tripbar .t-next { background: #ff8a3d; color: #14100b; border-color: transparent; }
+  #tripbar .s-btn:hover { border-color: #ff8a3d; }
+  #story {
+    position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px);
+    width: min(620px, 92vw); z-index: 14; display: none; opacity: 0;
+    background: rgba(18, 26, 34, 0.92); color: #f2ede4; border-radius: 16px;
+    padding: 20px 24px 14px; box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+    backdrop-filter: blur(8px); transition: opacity 0.5s, transform 0.5s;
+  }
+  #story.on { display: block; }
+  #story.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #story .s-chapter { font-size: 10.5px; letter-spacing: 2.5px; color: #ff8a3d; font-weight: 700; text-transform: uppercase; }
+  #story .s-title { font-size: 21px; font-weight: 800; margin: 4px 0 8px; }
+  #story .s-text { font-size: 13.5px; line-height: 1.65; color: #cfd6d3; }
+  #story .s-nav { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+  #story .s-btn {
+    background: rgba(255,255,255,0.08); color: #f2ede4; border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 8px; padding: 7px 14px; font-size: 12.5px; cursor: pointer; font-weight: 600;
+  }
+  #story .s-btn:hover { border-color: #ff8a3d; }
+  #story .s-next { background: #ff8a3d; color: #14100b; border-color: transparent; }
+  #story .s-exit { margin-left: auto; padding: 7px 10px; color: #98a2ab; }
+  #story .s-dots { display: flex; gap: 5px; flex: 1; justify-content: center; }
+  #story .s-dots span { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.22); cursor: pointer; }
+  #story .s-dots span.on { background: #ff8a3d; }
+
+  @media (max-width: 640px) { #sidebar { width: 260px; } #toggle { left: 272px; } }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div id="labels"></div>
+
+<div id="sidebar">
+  <header>
+    <h1>Mangalore <span>Atlas</span></h1>
+    <div class="sub">A hand-built 3D world of Kudla. Drag to orbit, scroll to zoom, right-drag to pan. Click any label to explore.</div>
+  </header>
+  <input id="search" type="text" placeholder="Search landmarks…" />
+  <div id="filters"></div>
+  <div id="list"></div>
+  <div id="trip">
+    <h2>🧳 My Trip <span id="tripCount"></span></h2>
+    <div id="tripList"><div class="empty">Click "Add to trip" on any landmark to plan your Mangalore itinerary.</div></div>
+    <div class="trip-btns" id="tripBtns" style="display:none">
+      <button id="btnTripTour">▶ Tour my trip</button>
+      <button id="btnTripClear" class="ghost">Clear</button>
+    </div>
+  </div>
+</div>
+<button id="toggle" title="Toggle sidebar">☰</button>
+
+<div id="controls">
+  <button id="btnStory" style="border-color:#ff8a3d;font-weight:700">📖 Story Mode</button>
+  <button id="btnTour">✈ Fly Tour</button>
+  <button id="btnHome">⌂ Reset View</button>
+</div>
+
+<div id="credit">
+  <a href="https://github.com/dev-shetty/mangalore-atlas" target="_blank" rel="noopener" title="View the repo">
+    <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+    mangalore-atlas
+  </a>
+  <span class="sep">·</span>
+  <a href="https://github.com/dev-shetty" target="_blank" rel="noopener">Created by&nbsp;<strong>Deveesh Shetty</strong></a>
+</div>
+
+<div id="tripbar">
+  <span class="t-label"></span>
+  <button class="s-btn t-prev">◀</button>
+  <button class="s-btn t-next">Next ▶</button>
+  <button class="s-btn t-end">✕ End</button>
+</div>
+
+<div id="story">
+  <div class="s-chapter"></div>
+  <div class="s-title"></div>
+  <div class="s-text"></div>
+  <div class="s-nav">
+    <button class="s-btn s-prev">◀ Back</button>
+    <div class="s-dots"></div>
+    <button class="s-btn s-next">Next ▶</button>
+    <button class="s-btn s-exit" title="Exit story">✕</button>
+  </div>
+</div>
+
+<div id="card">
+  <span class="c-close" onclick="closeCard()">✕</span>
+  <div class="c-title"></div>
+  <div class="c-cat"></div>
+  <div class="c-desc"></div>
+  <div class="c-fact"></div>
+  <button class="c-add"></button>
+</div>
+
+<script>
+/* ============================ DATA ============================ */
+const CATEGORIES = {
+  temple:   { label: "Temples & Worship", color: "#ff7043", icon: "🛕" },
+  beach:    { label: "Beaches",           color: "#29b6f6", icon: "🏖️" },
+  company:  { label: "Companies & Industry", color: "#ab47bc", icon: "🏢" },
+  mall:     { label: "Malls & Shopping",  color: "#f6b93b", icon: "🛍️" },
+  education:{ label: "Education",         color: "#66bb6a", icon: "🎓" },
+  food:     { label: "Food & Fun",        color: "#26c6da", icon: "🍨" },
+  hotel:    { label: "Hotels & Stays",    color: "#8d6e63", icon: "🏨" },
+  hospital: { label: "Hospitals",         color: "#ef5350", icon: "🏥" },
+  landmark: { label: "Other Landmarks",   color: "#ec407a", icon: "📍" },
+};
+
+const LANDMARKS = [
+  { name: "Kudroli Gokarnanatha Temple", cat: "temple", model: "gopuram", lng: 74.833, lat: 12.8763, alt: 12,
+    desc: "Grand white-and-gold Gokarnanatheshwara temple built by Narayana Guru — centre of Mangaluru Dasara.",
+    fact: "During Dasara the temple hosts one of Karnataka's biggest processions, with tiger-dance (Pili Vesha) troupes." },
+  { name: "Kadri Manjunath Temple", cat: "temple", model: "kadri", lng: 74.8556, lat: 12.8859, alt: 45, pad: 420,
+    desc: "Ancient temple (c. 1068 AD) with tiered Tulu-style copper roofs, bronze Lokeshwara, nine ponds and Pandava caves on the hill.",
+    fact: "Its bronze Lokeshwara is considered one of the finest bronzes in India; the ponds are fed by a natural spring." },
+  { name: "Mangaladevi Temple", cat: "temple", model: "mangaladevi", lng: 74.845, lat: 12.851, alt: 10, pad: 340,
+    desc: "9th-century temple of goddess Mangaladevi — she gives Mangaluru its name.",
+    fact: "The city is literally named after this temple: Mangala-uru, 'town of Mangaladevi'." },
+  { name: "Sharavu Mahaganapathi Temple", cat: "temple", model: "temple", lng: 74.8415, lat: 12.8686, alt: 12,
+    desc: "800-year-old Ganapathi shrine in the heart of the city.",
+    fact: "Locals visit Sharavu before starting anything new — exams, businesses, even new vehicles." },
+  { name: "St. Aloysius Chapel", cat: "temple", model: "church", lng: 74.8454, lat: 12.8738, alt: 58,
+    desc: "19th-century chapel covered wall-to-ceiling in paintings by Italian artist Antonio Moscheni.",
+    fact: "Often called the 'Sistine Chapel of India' — every inch of the interior is painted." },
+  { name: "Milagres Church", cat: "temple", model: "church", lng: 74.8449, lat: 12.8674, alt: 12,
+    desc: "Historic Roman Catholic church founded in 1680.",
+    fact: "Its façade lights up beautifully at Christmas." },
+  { name: "Rosario Cathedral", cat: "temple", model: "cathedral", lng: 74.8363, lat: 12.856, alt: 15,
+    desc: "Cathedral of Our Lady of the Rosary — oldest diocese church in Mangalore, dating to 1568.",
+    fact: "Its dome is modelled on St. Peter's Basilica in Rome." },
+  { name: "Zeenath Baksh Jumma Masjid", cat: "temple", model: "mosque", lng: 74.8354, lat: 12.8622, alt: 8,
+    desc: "One of India's oldest mosques (lineage to 644 AD), famous for intricate wooden interiors.",
+    fact: "Believed to be among the first mosques in India, founded by Arab traders." },
+  { name: "Kateel Durgaparameshwari Temple", cat: "temple", model: "kateel", lng: 74.8855, lat: 13.003, alt: 5, pad: 160,
+    desc: "Iconic temple on an islet in the middle of the Nandini river, ~26 km from the city.",
+    fact: "You cross a bridge over the flowing river to enter — in monsoon the river roars around the temple." },
+  { name: "Sadashiva Temple, Surathkal", cat: "temple", model: "temple", lng: 74.7925, lat: 13.0060, alt: 12,
+    desc: "Ancient Shiva temple on the rocky hillock beside Surathkal lighthouse, overlooking the sea.",
+    fact: "Surathkal gets its name from this rock — 'Shirady Kallu', the rock of the temple." },
+  { name: "Uchila Mahalakshmi Temple", cat: "temple", model: "temple", lng: 74.7965, lat: 13.0450, alt: 10,
+    desc: "Seaside Mahalakshmi temple at Uchila, between Surathkal and Mulki on the coastal highway.",
+    fact: "Beloved of the coastal Mogaveera fishing community — its annual jatre draws thousands." },
+  { name: "Bappanadu Durgaparameshwari, Mulki", cat: "temple", model: "temple", lng: 74.8000, lat: 13.0860, alt: 6,
+    desc: "Famous riverside temple on the Shambhavi at Mulki, known for the giant Bappanadu Dolu drum.",
+    fact: "Legend says it was founded by Bappa Beary, a Muslim merchant — a 700-year-old symbol of communal harmony." },
+  { name: "Kapu Mariamma Temple", cat: "temple", model: "temple", lng: 74.7560, lat: 13.2225, alt: 10,
+    desc: "Historic Mariamma temple in Kaup town, a short walk from the famous beach.",
+    fact: "Kaup's twin Mariamma temples host a fiery annual festival with hook-swinging rituals of old." },
+  { name: "Kapu Beach & Lighthouse", cat: "beach", model: "lighthouse", lng: 74.7515, lat: 13.2160, alt: 5,
+    desc: "Kaup's iconic 1901 lighthouse standing on sea rocks over a gorgeous beach.",
+    fact: "The lighthouse-on-the-rocks is one of coastal Karnataka's most photographed spots — a favourite film-shoot location." },
+  { name: "Someshwara Temple, Ullal", cat: "temple", model: "temple", lng: 74.8385, lat: 12.7862, alt: 8,
+    desc: "Ancient Somanatha temple right on the shore at Ullal, beside the Rudra Shile rocks.",
+    fact: "Rani Abbakka of Ullal, the fearless queen who fought the Portuguese, prayed here before her battles." },
+  { name: "Panambur Beach", cat: "beach", model: "beach_kite", lng: 74.8062, lat: 12.937, alt: 2,
+    desc: "Mangalore's most popular beach — jet ski, camel rides, and the international kite festival.",
+    fact: "Home to India's famous International Kite Festival — watch the kites flying over the model!" },
+  { name: "Tannirbhavi Beach", cat: "beach", model: "beach", lng: 74.81, lat: 12.885, alt: 2,
+    desc: "Serene beach reachable by a fun ferry across the Gurupura river; tree park and sunsets.",
+    fact: "The ferry from Sultan Battery costs just a few rupees — best-value boat ride in town. Watch it ply the river!" },
+  { name: "Someshwara Beach, Ullal", cat: "beach", model: "beach", lng: 74.837, lat: 12.788, alt: 2,
+    desc: "Rocky beach beside the ancient Someshwara temple, with the famous Rudra Shile rocks.",
+    fact: "Waves crashing on the Rudra rocks at sunset is a photographer's dream." },
+  { name: "Sasihithlu Beach", cat: "beach", model: "beach_surf", lng: 74.7985, lat: 13.0715, alt: 2,
+    desc: "Quiet beach where the Shambhavi and Nandini rivers meet the sea — a surfing hotspot.",
+    fact: "Hosts the Indian Open of Surfing — Mangalore is quietly one of India's surfing capitals." },
+  { name: "NITK / Surathkal Beach", cat: "beach", model: "lighthouse", lng: 74.7918, lat: 13.0048, alt: 4,
+    desc: "Clean beach with a working lighthouse, adjoining the NITK campus.",
+    fact: "Climb the rocks nearby for the best sunset in Surathkal." },
+  { name: "Infosys Mangalore DC", cat: "company", model: "office", lng: 74.8361, lat: 12.9044, alt: 25,
+    desc: "Infosys development centre at Kottara — one of the city's biggest IT employers.",
+    fact: "Mangalore has deep IT roots — Infosys arrived here decades ago." },
+  { name: "MRPL Refinery", cat: "company", model: "refinery", lng: 74.865, lat: 12.958, alt: 60, pad: 400, mScale: 1.3,
+    desc: "Mangalore Refinery and Petrochemicals Ltd — major ONGC-group oil refinery at Katipalla.",
+    fact: "At night the refinery's flare stacks glow like a city of lights along NH-66." },
+  { name: "New Mangalore Port (NMPT)", cat: "company", model: "port", lng: 74.815, lat: 12.9285, alt: 4, pad: 400, mScale: 1.35,
+    desc: "Deep-water all-weather port at Panambur — Karnataka's only major port.",
+    fact: "Handles coffee and cashew exports — and giant cruise ships dock here in season." },
+  { name: "MCF Fertilizer Plant", cat: "company", model: "silos", lng: 74.822, lat: 12.921, alt: 8,
+    desc: "Mangalore Chemicals & Fertilizers — the state's only fertilizer manufacturing unit.",
+    fact: "Its towering prilling tower is visible from the highway." },
+  { name: "Infosys / Diya, Kulai", cat: "company", model: "office", lng: 74.804, lat: 12.966, alt: 8,
+    desc: "IT & support services cluster at Kulai, among Mangalore's early tech hubs.",
+    fact: "One of the first areas to prove Mangalore could be an IT outsourcing hub." },
+  { name: "Karuna Pride, Kottara", cat: "company", model: "itpark", lng: 74.8425, lat: 12.9015, alt: 22,
+    desc: "The IT building at Kottara that houses Niveus Solutions and Novigo — Mangalore's cloud-tech success story.",
+    fact: "Niveus grew from this building into a 1000+ engineer Google Cloud powerhouse, proving Kudla can build big tech." },
+  { name: "Kottara Tech Hub", cat: "company", model: "office", lng: 74.8390, lat: 12.9000, alt: 22,
+    desc: "Kottara's startup cluster — UniCourt's legal-data engineering, Winman's tax software, and WrkWrk coworking.",
+    fact: "Winman's software runs in CA offices across India — built entirely from Mangalore." },
+  { name: "Ajanta Business Centre", cat: "company", model: "office", lng: 74.8460, lat: 12.8600, alt: 15,
+    desc: "The long-standing Ajanta commercial complex — offices and businesses in the heart of the city.",
+    fact: "One of the city's first true commercial office buildings, an address generations of businesses have shared." },
+  { name: "City Centre Mall", cat: "mall", model: "mall", lng: 74.8428, lat: 12.8713, alt: 14,
+    desc: "The city's largest mall at Hampankatta — shopping, multiplex, food court.",
+    fact: "Built where the old bus stand stood — the rooftop food court has harbour views." },
+  { name: "Forum Fiza Mall", cat: "mall", model: "mall", lng: 74.8383, lat: 12.858, alt: 12,
+    desc: "Big mall at Pandeshwar with PVR cinemas and major retail brands.",
+    fact: "The biggest mall in coastal Karnataka by floor area." },
+  { name: "Bharath Mall", cat: "mall", model: "mall", lng: 74.841, lat: 12.8865, alt: 18,
+    desc: "Popular mall near Lalbagh with hypermarket and Cinepolis.",
+    fact: "The go-to weekend hangout for a generation of Mangaloreans." },
+  { name: "Central Market (Bunder)", cat: "mall", model: "market", lng: 74.8389, lat: 12.8667, alt: 8,
+    desc: "The old-city wholesale market — spices, fish, flowers, pure Mangalore bustle.",
+    fact: "Come at dawn to watch the fish auctions — the freshest catch in Karnataka lands here." },
+  { name: "NITK Surathkal", cat: "education", model: "nitk", lng: 74.7966, lat: 13.0094, alt: 15, pad: 600, mScale: 1.35,
+    desc: "National Institute of Technology Karnataka — top engineering institute with its own beach.",
+    fact: "The only IIT/NIT in India with a private beach on campus." },
+  { name: "St. Aloysius College", cat: "education", model: "aloysius", lng: 74.8447, lat: 12.8739, alt: 55,
+    desc: "Historic Jesuit institution (1880) on Lighthouse Hill.",
+    fact: "Its museum houses one of India's oldest college collections — including a vintage aeroplane!" },
+  { name: "Mangalore University, Konaje", cat: "education", model: "university", lng: 74.9261, lat: 12.8166, alt: 105, pad: 400, mScale: 1.25,
+    desc: "Sprawling hilltop university campus at Konaje.",
+    fact: "The campus is so green that peacocks roam it freely." },
+  { name: "KMC Mangalore", cat: "education", model: "college", lng: 74.8442, lat: 12.8702, alt: 20,
+    desc: "Kasturba Medical College — India's first private medical college (1953).",
+    fact: "Doctors trained here practice in over 50 countries." },
+  { name: "Sahyadri College", cat: "education", model: "sahyadri", lng: 74.905, lat: 12.866, alt: 8, pad: 340, mScale: 1.2,
+    desc: "Engineering & management campus on the banks of the Netravati at Adyar.",
+    fact: "The riverside campus hosts one of coastal Karnataka's biggest tech fests." },
+  { name: "Srinivas Campus, Valachil", cat: "education", model: "college", lng: 74.9300, lat: 12.8680, alt: 72, pad: 320,
+    desc: "Srinivas University's hilltop engineering campus at Valachil, overlooking the NH-75 Bengaluru highway.",
+    fact: "From the hilltop blocks you can watch the Netravati valley open out below." },
+  { name: "Expert PU College, Valachil", cat: "education", model: "college", lng: 74.9270, lat: 12.8700, alt: 60,
+    desc: "The famous Expert PU College campus at Valachil, right next to the Srinivas hill.",
+    fact: "Kudla's CET/NEET topper factory — half the district's rank cards trace back here." },
+  { name: "Pabbas Ice Cream", cat: "food", model: "icecream", lng: 74.8383, lat: 12.8863, alt: 18,
+    desc: "THE legendary ice cream parlour — birthplace of the Gadbad.",
+    fact: "Gadbad was invented here: layers of ice cream, jelly, fruits & dry fruits in a tall glass. Non-negotiable stop!" },
+  { name: "Ideal Ice Cream (Ideals)", cat: "food", model: "icecream", lng: 74.8418, lat: 12.8677, alt: 12,
+    desc: "Mangalore's other iconic ice cream institution, since 1975.",
+    fact: "Locals fiercely debate Pabbas vs Ideals. Solve it the right way: try both." },
+  { name: "New Taj Mahal Café", cat: "food", model: "cafe", lng: 74.8395, lat: 12.8755, alt: 15,
+    desc: "Century-old Udupi-style café — home of crispy Goli Baje and Mangalore Buns.",
+    fact: "Goli Baje + a tumbler of filter coffee here is the most Mangalorean breakfast possible." },
+  { name: "Giri Manjas", cat: "food", model: "fish", lng: 74.8407, lat: 12.8663, alt: 12,
+    desc: "Hole-in-the-wall legend for Mangalorean fish meals — anjal fry, fish curry & neer dosa.",
+    fact: "No fancy interiors, just the best fish thali in town — arrive before 1 pm or queue." },
+  { name: "Machali, Mannagudda", cat: "food", model: "fish", lng: 74.8368, lat: 12.8815, alt: 15,
+    desc: "Hugely popular coastal seafood restaurant — crab ghee roast and prawn sukka.",
+    fact: "Ghee roast was invented in this region — eating one here is a rite of passage." },
+  { name: "Manasa Water Park", cat: "food", model: "waterpark", lng: 74.8925, lat: 12.9185, alt: 55,
+    desc: "Water slides and rides next to Pilikula lake — family fun day.",
+    fact: "Combine with Pilikula zoo & planetarium next door for a full day trip." },
+  { name: "Mangalore Intl. Airport", cat: "landmark", model: "airport", lng: 74.889, lat: 12.961, alt: 103, pad: 650, mScale: 1.9,
+    desc: "Tabletop airport at Bajpe with domestic & Gulf flights.",
+    fact: "One of only a handful of 'tabletop' runways in India — watch the plane circling!" },
+  { name: "Mangalore Central Station", cat: "landmark", model: "train", lng: 74.8432, lat: 12.8634, alt: 12,
+    desc: "The city's main railway terminus at Hampankatta.",
+    fact: "The Konkan Railway into Mangalore is rated among India's most scenic train rides." },
+  { name: "Sultan Battery", cat: "landmark", model: "watchtower", lng: 74.828, lat: 12.884, alt: 6,
+    desc: "Watchtower built by Tipu Sultan in 1784 to stop warships entering the Gurupura.",
+    fact: "Take the ferry from right behind the tower to Tannirbhavi beach." },
+  { name: "Pilikula Nisargadhama", cat: "landmark", model: "pilikula", lng: 74.8987, lat: 12.9193, alt: 70, pad: 420, mScale: 1.2,
+    desc: "Eco-park with a zoo, botanical garden, lake, heritage village and Karnataka's biggest planetarium.",
+    fact: "'Pili-kula' means 'tiger pond' in Tulu — real tigers live in the zoo. Spot the ferris wheel turning!" },
+  { name: "Kadri Park", cat: "landmark", model: "park", lng: 74.8562, lat: 12.8891, alt: 40,
+    desc: "The largest park in Mangalore, at the foot of Kadri hill — musical fountain and gardens.",
+    fact: "The musical fountain runs on weekend evenings — free and delightful." },
+  { name: "Light House Hill Garden", cat: "landmark", model: "lighthouse", lng: 74.8415, lat: 12.8715, alt: 55,
+    desc: "Hilltop garden around the old lighthouse with views over city and sea.",
+    fact: "The lighthouse dates to Hyder Ali's time — one of the oldest on the west coast." },
+  { name: "Old Port / Bunder", cat: "landmark", model: "boats", lng: 74.834, lat: 12.861, alt: 4,
+    desc: "The historic fishing harbour — boats, fish auctions, centuries of coastal trade.",
+    fact: "Mangalore traded with Persia and Arabia from this very harbour for over a thousand years." },
+  { name: "Nehru Maidan", cat: "landmark", model: "maidan", lng: 74.8402, lat: 12.8668, alt: 10,
+    desc: "The city's historic central ground at Hampankatta — cricket, exhibitions, rallies and evening walkers.",
+    fact: "Almost every big public event in Mangalore's history has happened on this maidan." },
+  { name: "Mangala Stadium", cat: "landmark", model: "stadium", lng: 74.8390, lat: 12.8735, alt: 16, pad: 300,
+    desc: "Mangalore's main stadium at Lady Hill — athletics track, football and Ranji cricket.",
+    fact: "Floodlit evening matches here pull crowds from every corner of Kudla." },
+  { name: "Planet SKS Towers", cat: "landmark", model: "twintowers", lng: 74.8385, lat: 12.8955, alt: 18,
+    desc: "Twin ~36-storey residential towers at Kottara — the tallest buildings in coastal Karnataka.",
+    fact: "On a clear day the towers are visible from ships far out in the Arabian Sea." },
+  { name: "The Ocean Pearl", cat: "hotel", model: "hotel", lng: 74.8425, lat: 12.8758, alt: 15,
+    desc: "Kudla's best-known business hotel at Kodialbail, near Kudroli temple.",
+    fact: "Its seafood restaurant is a city institution for anjal tawa fry and crab." },
+  { name: "Goldfinch Hotel", cat: "hotel", model: "hotel", lng: 74.8478, lat: 12.8725, alt: 30,
+    desc: "Upscale hotel at Bunts Hostel Circle with the famous Café Noir bakery.",
+    fact: "Home to one of Mangalore's most loved Sunday brunches." },
+  { name: "Wenlock District Hospital", cat: "hospital", model: "hospital", lng: 74.8425, lat: 12.8625, alt: 10,
+    desc: "The grand old government hospital of Mangalore, serving the city since 1848.",
+    fact: "Named after Lord Wenlock — generations of Mangaloreans were born within these walls." },
+  { name: "Father Muller Hospital", cat: "hospital", model: "hospital", lng: 74.8555, lat: 12.8570, alt: 30,
+    desc: "Father Muller Medical College Hospital at Kankanady, founded 1880 as a homeopathic dispensary.",
+    fact: "Started by a Jesuit priest with a box of homeopathic medicines — now a whole medical township." },
+  { name: "AJ Hospital, Kuntikana", cat: "hospital", model: "hospital", lng: 74.8500, lat: 12.8930, alt: 25,
+    desc: "AJ Hospital & Research Centre on NH-66 at Kuntikana — one of the city's biggest private hospitals.",
+    fact: "Part of the Laxmi Memorial group with its own medical and engineering colleges." },
+  { name: "Yenepoya Hospital, Deralakatte", cat: "hospital", model: "hospital", lng: 74.8880, lat: 12.8100, alt: 48,
+    desc: "Yenepoya's deemed-university medical campus on the Deralakatte plateau.",
+    fact: "Deralakatte is nicknamed the 'health city' — half a dozen medical campuses cluster on this one plateau." },
+  { name: "Clock Tower, Hampankatta", cat: "landmark", model: "clocktower", lng: 74.8428, lat: 12.8683, alt: 12,
+    desc: "The iconic clock tower roundabout at Hampankatta — the city's zero point.",
+    fact: "Meet anyone in Mangalore: 'clock tower bali sigana' is still the default rendezvous." },
+  { name: "Pumpwell Flyover", cat: "landmark", model: "flyover", lng: 74.8585, lat: 12.8560, alt: 30, pad: 300, mScale: 1.3,
+    desc: "The busy Pumpwell junction where NH-66 and NH-75 meet, with its flyover swinging overhead.",
+    fact: "Officially Mahaveer Circle — but nobody has ever called it that." },
+  { name: "Maurishka Towers, Kadri", cat: "landmark", model: "skyscraper", lng: 74.8525, lat: 12.8805, alt: 30,
+    desc: "The tall cream residential tower on the Kadri skyline.",
+    fact: "One of the first true high-rises that changed Kudla's skyline forever." },
+  { name: "Allegro Twin Towers, Falnir", cat: "landmark", model: "twintowers", lng: 74.8445, lat: 12.8575, alt: 18,
+    desc: "Land Trades' twin residential towers rising over Falnir.",
+    fact: "Part of the new wave of 20+ storey towers reshaping the city's silhouette." },
+  { name: "State Bank Bus Stand", cat: "landmark", model: "busstand", lng: 74.8390, lat: 12.8652, alt: 8,
+    desc: "The city bus hub at State Bank, Hampankatta — every private bus route in Kudla starts or ends here.",
+    fact: "The conductors' rapid-fire whistle-and-shout routing here is a Mangalore art form of its own." },
+  { name: "KSRTC Bus Stand, Bejai", cat: "landmark", model: "busstand", lng: 74.8500, lat: 12.8795, alt: 24,
+    desc: "The long-distance KSRTC terminus at Bejai — red Rajahamsas and green expresses to every corner of Karnataka.",
+    fact: "The overnight KSRTC to Bengaluru over the ghats is a rite of passage for every Mangalore student." },
+  { name: "DC Office, Padil", cat: "landmark", model: "govt", lng: 74.8730, lat: 12.8470, alt: 28,
+    desc: "The District Commissioner's office complex at Padil — administrative headquarters of Dakshina Kannada district.",
+    fact: "The single-window complex brings nearly every district government office under one roof — locals just call it 'DC Office'." },
+  { name: "Bejai Museum", cat: "landmark", model: "museum", lng: 74.8485, lat: 12.883, alt: 25,
+    desc: "Government museum with ancient sculptures, coins, and art of coastal Karnataka.",
+    fact: "Entry costs almost nothing and it's usually blissfully empty — a hidden gem." },
+];
+
+/* ==================== GEOGRAPHY (stylized Mangalore) ==================== */
+const C_LNG = 74.8420, C_LAT = 12.8700;
+const MPD_X = 108500, MPD_Z = 110574; // metres per degree
+const ll = (lng, lat) => ({ x: (lng - C_LNG) * MPD_X, z: -(lat - C_LAT) * MPD_Z });
+
+LANDMARKS.forEach((l) => { const p = ll(l.lng, l.lat); l.x = p.x; l.z = p.z; });
+
+// deterministic value noise
+function hash2(ix, iz) { const n = Math.sin(ix * 127.1 + iz * 311.7) * 43758.5453; return n - Math.floor(n); }
+function vnoise(x, z) {
+  const ix = Math.floor(x), iz = Math.floor(z), fx = x - ix, fz = z - iz;
+  const sx = fx * fx * (3 - 2 * fx), sz = fz * fz * (3 - 2 * fz);
+  const a = hash2(ix, iz), b = hash2(ix + 1, iz), c = hash2(ix, iz + 1), d = hash2(ix + 1, iz + 1);
+  return a + (b - a) * sx + (c - a) * sz + (a - b - c + d) * sx * sz;
+}
+function fbm(x, z) {
+  let v = 0, amp = 0.5, f = 1;
+  for (let i = 0; i < 4; i++) { v += amp * vnoise(x * f, z * f); amp *= 0.5; f *= 2.1; }
+  return v;
+}
+
+// coastline: x position of shore as function of z (north = negative z)
+// includes the Bengre sand spit (12.895 → 12.845) with the estuary opening at its tip
+const COAST_PTS = [
+  [13.300, 74.740], [13.240, 74.745], [13.190, 74.755], [13.140, 74.770], [13.100, 74.790],
+  [13.069, 74.797], [13.038, 74.792], [13.005, 74.790], [12.975, 74.798],
+  [12.955, 74.804], [12.937, 74.805], [12.918, 74.808], [12.903, 74.809], [12.885, 74.810],
+  [12.868, 74.813], [12.853, 74.818], [12.846, 74.822], [12.843, 74.828], [12.815, 74.833],
+  [12.780, 74.838], [12.740, 74.841],
+].map(([lat, lng]) => ({ z: ll(lng, lat).z, x: ll(lng, lat).x }));
+function coastX(z) {
+  const p = COAST_PTS;
+  if (z <= p[0].z) return p[0].x;
+  for (let i = 0; i < p.length - 1; i++) {
+    if (z >= p[i].z && z <= p[i + 1].z) {
+      const t = (z - p[i].z) / (p[i + 1].z - p[i].z);
+      return p[i].x + t * (p[i + 1].x - p[i].x);
+    }
+  }
+  return p[p.length - 1].x;
+}
+
+// rivers as polylines [lng,lat] — REAL courses:
+// Gurupura flows in from the east, turns SOUTH at Kulur and runs behind the
+// Bengre spit past Sultan Battery & the Old Port to the shared estuary (~12.845).
+// Netravati comes from the south-east past Adyar/Jeppinamogaru and bends NW to the same mouth.
+const RIVERS = [
+  { w: 320, pts: [[74.935, 12.934], [74.905, 12.9265], [74.875, 12.9215], [74.848, 12.9145], [74.830, 12.908],
+                  [74.820, 12.903], [74.8165, 12.895], [74.8185, 12.884], [74.822, 12.872], [74.826, 12.858], [74.828, 12.847]] }, // Gurupura/Phalguni
+  { w: 360, pts: [[74.945, 12.866], [74.912, 12.863], [74.893, 12.858], [74.876, 12.854], [74.862, 12.851],
+                  [74.851, 12.846], [74.844, 12.841], [74.836, 12.842], [74.828, 12.847]] },                                        // Netravati
+  { w: 500, pts: [[74.828, 12.847], [74.816, 12.8445]] },                                                                           // estuary mouth to the sea
+  { w: 260, pts: [[74.950, 13.000], [74.912, 13.0035], [74.8855, 13.0030], [74.860, 13.0065], [74.828, 13.037], [74.798, 13.068]] },  // Nandini — flows around the Kateel islet
+  { w: 240, pts: [[74.870, 13.104], [74.835, 13.098], [74.810, 13.094], [74.796, 13.087], [74.789, 13.073]] },                        // Shambhavi at Mulki
+];
+RIVERS.forEach((r) => { r.xz = r.pts.map(([lng, lat]) => ll(lng, lat)); });
+
+function distSeg(px, pz, ax, az, bx, bz) {
+  const dx = bx - ax, dz = bz - az;
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / (dx * dx + dz * dz)));
+  const gx = ax + t * dx - px, gz = az + t * dz - pz;
+  return Math.sqrt(gx * gx + gz * gz);
+}
+function riverDist(x, z) {
+  let best = 1e9;
+  for (const r of RIVERS) {
+    for (let i = 0; i < r.xz.length - 1; i++) {
+      const d = distSeg(x, z, r.xz[i].x, r.xz[i].z, r.xz[i + 1].x, r.xz[i + 1].z) - (r.w - 260);
+      if (d < best) best = d;
+    }
+  }
+  return best;
+}
+
+const HILLS = [
+  { lng: 74.8570, lat: 12.8870, r: 950, h: 45 },   // Kadri hill (temple on its west slope)
+  { lng: 74.8425, lat: 12.8722, r: 560, h: 42 },   // Lighthouse hill (chapel, college, garden)
+  { lng: 74.9261, lat: 12.8166, r: 1700, h: 80 },  // Konaje
+  { lng: 74.8987, lat: 12.9193, r: 1300, h: 45 },  // Pilikula ridge
+  { lng: 74.8890, lat: 12.9610, r: 1150, h: 85 },  // Bajpe tabletop (hilltop airport)
+  { lng: 74.8580, lat: 12.8650, r: 900, h: 32 },   // Nanthoor–Pumpwell ridge
+  { lng: 74.8982, lat: 12.8090, r: 1200, h: 50 },  // Deralakatte plateau
+  { lng: 74.8650, lat: 12.9580, r: 1000, h: 30 },  // Katipalla rise (MRPL)
+].map((h) => ({ ...h, ...ll(h.lng, h.lat) }));
+const KATEEL = ll(74.8855, 13.0030);
+
+function rawHeight(x, z) {
+  const d = x - coastX(z); // metres inland
+  if (d < 0) return -7 - Math.min(22, -d * 0.011); // sea floor drops fast: crisp dark coast
+  let h;
+  if (d < 260) h = 1.2 + d * 0.004; // beach sand
+  else {
+    const inland = Math.min(1, (d - 260) / 9000);
+    h = 2.5 + inland * 26 + fbm(x * 0.00035, z * 0.00035) * inland * 55;
+  }
+  for (const hill of HILLS) {
+    const dh = Math.hypot(x - hill.x, z - hill.z);
+    if (dh < hill.r) {
+      const t = Math.cos((dh / hill.r) * Math.PI) * 0.5 + 0.5;
+      h += hill.h * t * t;
+    }
+  }
+  // carve rivers
+  const rd = riverDist(x, z);
+  if (rd < 260) {
+    const t = Math.max(0, rd / 260);
+    const bank = t * t;
+    h = h * bank + (-5) * (1 - bank);
+  }
+  // Kateel islet in the river
+  const dk = Math.hypot(x - KATEEL.x, z - KATEEL.z);
+  if (dk < 150) h = Math.max(h, 3.2 * (1 - dk / 150) + 1.5);
+  return h;
+}
+
+// each landmark sits at its REAL elevation (alt, metres ASL); the terrain blends
+// up/down to meet it across a flatten pad — so hilltop places are genuinely on hills.
+LANDMARKS.forEach((l) => {
+  l.y = l.alt !== undefined ? l.alt : Math.max(rawHeight(l.x, l.z), l.cat === "beach" ? 1.4 : 1.0);
+  l.padR = l.pad || 240;
+});
+function heightAt(x, z) {
+  let h = rawHeight(x, z);
+  for (const l of LANDMARKS) {
+    const d = Math.hypot(x - l.x, z - l.z);
+    if (d < l.padR) {
+      const t = 1 - d / l.padR;
+      const w = t * t * (3 - 2 * t);
+      h = h * (1 - w) + l.y * w;
+    }
+  }
+  return h;
+}
+
+/* ============================ SCENE ============================ */
+const canvas = document.getElementById("scene");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x8ec9ec);
+scene.fog = new THREE.Fog(0xaad4ee, 48000, 115000);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 10, 120000);
+const HOME_POS = new THREE.Vector3(-11500, 8200, 10500);
+const HOME_TGT = new THREE.Vector3(1500, 0, -2500);
+camera.position.copy(HOME_POS);
+
+// debug/deep-link: ?cam=px,py,pz,tx,ty,tz positions the camera
+{
+  const q = new URLSearchParams(location.search).get("cam");
+  if (q) {
+    const [px, py, pz, tx, ty, tz] = q.split(",").map(Number);
+    camera.position.set(px, py, pz);
+    HOME_TGT.set(tx, ty, tz);
+  }
+}
+const controls = new THREE.OrbitControls(camera, canvas);
+controls.target.copy(HOME_TGT);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.maxPolarAngle = 1.45;
+controls.minDistance = 250;
+controls.maxDistance = 52000;
+
+scene.add(new THREE.HemisphereLight(0xd9ecff, 0x94865f, 0.62));
+const sun = new THREE.DirectionalLight(0xfff3da, 1.18);
+sun.position.set(-8000, 14000, -6000);
+scene.add(sun);
+
+/* ---- terrain ---- */
+const TX0 = -11000, TX1 = 14000, TZ0 = -40500, TZ1 = 11500;
+const SEGX = 190, SEGZ = 340;
+const terrainGeo = new THREE.PlaneGeometry(TX1 - TX0, TZ1 - TZ0, SEGX, SEGZ);
+terrainGeo.rotateX(-Math.PI / 2);
+{
+  const pos = terrainGeo.attributes.position;
+  const colors = new Float32Array(pos.count * 3);
+  const cDeep = new THREE.Color(0x0d3f6d), cShallow = new THREE.Color(0x3f89ad),
+    cSand = new THREE.Color(0xefd493), cPlain = new THREE.Color(0xe4d6ab),
+    cGreen1 = new THREE.Color(0x93b65c), cGreen2 = new THREE.Color(0x6a9450), tmp = new THREE.Color();
+  const BEACH_XZ = LANDMARKS.filter((l) => l.cat === "beach").map((l) => [l.x, l.z]);
+  const nearBeach = (x, z) => BEACH_XZ.some(([bx, bz]) => (x - bx) * (x - bx) + (z - bz) * (z - bz) < 550 * 550);
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i) + (TX0 + TX1) / 2, z = pos.getZ(i) + (TZ0 + TZ1) / 2;
+    const h = heightAt(x, z);
+    pos.setY(i, h);
+    pos.setX(i, x); pos.setZ(i, z);
+    if (h < 0) tmp.copy(cDeep).lerp(cShallow, Math.min(1, (h + 16) / 16));
+    else if (h < 2.4 || (h < 5.5 && nearBeach(x, z))) tmp.copy(cSand);   // wide sandy aprons at beaches
+    else if (h < 22) {
+      tmp.copy(cPlain).lerp(cGreen1, Math.max(0, Math.min(1, fbm(x * 0.0011, z * 0.0011) - 0.40) * 2.4));
+    } else if (h < 48) tmp.copy(cGreen1);
+    else tmp.copy(cGreen2);
+    colors[i * 3] = tmp.r; colors[i * 3 + 1] = tmp.g; colors[i * 3 + 2] = tmp.b;
+  }
+  terrainGeo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  terrainGeo.computeVertexNormals();
+  // slope shading: darken steep faces so hills, valleys and the Bajpe tabletop read in relief
+  const nrm = terrainGeo.attributes.normal;
+  for (let i = 0; i < pos.count; i++) {
+    if (pos.getY(i) < 0.5) continue;
+    const ny = Math.max(0, nrm.getY(i));
+    const shade = 0.52 + 0.48 * ny * ny;
+    colors[i * 3] *= shade; colors[i * 3 + 1] *= shade; colors[i * 3 + 2] *= shade;
+  }
+  terrainGeo.attributes.color.needsUpdate = true;
+}
+const terrain = new THREE.Mesh(terrainGeo, new THREE.MeshPhongMaterial({ vertexColors: true, flatShading: true, shininess: 0 }));
+scene.add(terrain);
+
+/* ---- water ---- */
+const water = new THREE.Mesh(
+  new THREE.PlaneGeometry(90000, 90000),
+  new THREE.MeshLambertMaterial({ color: 0x1c60a0, transparent: true, opacity: 0.93 })
+);
+water.rotation.x = -Math.PI / 2;
+water.position.set(0, 0, -7000);
+scene.add(water);
+
+/* ---- roads ---- */
+function makeRoad(lls, width = 70, color = 0x7d8590) {
+  const pts = lls.map(([lng, lat]) => ll(lng, lat));
+  // resample
+  const path = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const n = Math.max(2, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 160));
+    for (let j = 0; j < n; j++) path.push({ x: a.x + ((b.x - a.x) * j) / n, z: a.z + ((b.z - a.z) * j) / n });
+  }
+  path.push(pts[pts.length - 1]);
+  const verts = [], idx = [];
+  for (let i = 0; i < path.length; i++) {
+    const p = path[i], q = path[Math.min(i + 1, path.length - 1)], o = path[Math.max(i - 1, 0)];
+    let dx = q.x - o.x, dz = q.z - o.z;
+    const len = Math.hypot(dx, dz) || 1;
+    const nx = -dz / len, nz = dx / len;
+    const y = Math.max(heightAt(p.x, p.z), 1.0) + 1.6;
+    verts.push(p.x + nx * width / 2, y, p.z + nz * width / 2, p.x - nx * width / 2, y, p.z - nz * width / 2);
+    if (i < path.length - 1) {
+      const k = i * 2;
+      idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(verts), 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  const mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color }));
+  scene.add(mesh);
+}
+// NH-66: hugs the coast in the north, crosses the Gurupura at Kulur bridge,
+// runs INLAND through the city (Bejai–Nanthoor–Pumpwell), crosses the Netravati at Ullal.
+const NH66_PTS = [
+  [74.762, 13.240], [74.775, 13.190], [74.786, 13.140], [74.797, 13.095],
+  [74.800, 13.090], [74.801, 13.050], [74.796, 13.010], [74.802, 12.975], [74.808, 12.950],
+  [74.810, 12.930], [74.812, 12.915], [74.8145, 12.906], [74.8215, 12.8985], [74.830, 12.9015],
+  [74.8365, 12.8985], [74.845, 12.891], [74.850, 12.880], [74.856, 12.869], [74.8585, 12.857],
+  [74.853, 12.848], [74.8425, 12.8455], [74.8425, 12.836], [74.845, 12.824], [74.8455, 12.807],
+  [74.841, 12.780], [74.841, 12.745],
+];
+makeRoad(NH66_PTS, 130, 0x656c76);
+// bridges (deck + pillars) at the two big NH-66 river crossings
+function makeBridge(lngA, latA, lngB, latB, width = 90) {
+  const a = ll(lngA, latA), b = ll(lngB, latB);
+  const len = Math.hypot(b.x - a.x, b.z - a.z);
+  const g = new THREE.Group();
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(len, 8, width), new THREE.MeshLambertMaterial({ color: 0x7d848c }));
+  deck.position.y = 14;
+  g.add(deck);
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 4, 6), new THREE.MeshLambertMaterial({ color: 0xb8bec5 }));
+  rail.position.set(0, 20, width / 2 - 3); g.add(rail);
+  const rail2 = rail.clone(); rail2.position.z = -width / 2 + 3; g.add(rail2);
+  const nP = Math.max(2, Math.round(len / 220));
+  for (let i = 0; i <= nP; i++) {
+    const p = new THREE.Mesh(new THREE.BoxGeometry(16, 22, width * 0.7), new THREE.MeshLambertMaterial({ color: 0x9aa0a8 }));
+    p.position.set(-len / 2 + (len * i) / nP, 0, 0);
+    g.add(p);
+  }
+  g.position.set((a.x + b.x) / 2, 0, (a.z + b.z) / 2);
+  g.rotation.y = -Math.atan2(b.z - a.z, b.x - a.x);
+  scene.add(g);
+}
+makeBridge(74.8135, 12.9075, 74.8235, 12.8975, 80);   // Kulur bridge over the Gurupura
+makeBridge(74.8435, 12.8520, 74.8420, 12.8340, 80);   // Netravati road bridge at Ullal
+makeBridge(74.8395, 12.8510, 74.8380, 12.8350, 40);   // Netravati railway bridge (Konkan/Southern Rly)
+makeRoad([[74.8434, 12.8691], [74.8556, 12.8859], [74.868, 12.920], [74.8890, 12.9610]], 85);          // city→Kadri→airport
+makeRoad([[74.8434, 12.8691], [74.868, 12.898], [74.8987, 12.9193]], 80);                              // →Pilikula
+makeRoad([[74.8585, 12.857], [74.885, 12.840], [74.905, 12.828], [74.9261, 12.8166]], 80);             // Pumpwell→Konaje
+makeRoad([[74.858, 12.869], [74.885, 12.862], [74.915, 12.858], [74.945, 12.857], [74.968, 12.857]], 110, 0x656c76); // NH-75 → BC Road/Bengaluru
+makeRoad([[74.848, 12.891], [74.878, 12.899], [74.910, 12.901], [74.940, 12.906], [74.968, 12.911]], 100, 0x656c76); // NH-169 → Moodbidri/Shimoga
+makeRoad([[74.8420, 12.8660], [74.8360, 12.8620], [74.8320, 12.8740], [74.8290, 12.8838]], 65);        // Bunder→Sultan Battery
+// local city streets — the everyday grid that stitches the neighbourhoods together
+[
+  [[74.8434, 12.8691], [74.8410, 12.8770], [74.8380, 12.8860], [74.8330, 12.8763]],   // Lighthouse Hill Rd → Lalbagh → Kudroli loop
+  [[74.8434, 12.8691], [74.8400, 12.8640], [74.8360, 12.8620]],                        // Hampankatta → Bunder
+  [[74.8434, 12.8691], [74.8420, 12.8620], [74.8450, 12.8510]],                        // Attavar → Mangaladevi
+  [[74.8434, 12.8691], [74.8480, 12.8830], [74.8530, 12.8840]],                        // KS Rao Rd → Bejai → Kadri
+  [[74.8480, 12.8830], [74.8380, 12.8860]],                                            // Bejai–Lalbagh cross
+  [[74.8600, 12.8646], [74.8500, 12.8630], [74.8420, 12.8620]],                        // Kankanady → Attavar
+  [[74.8556, 12.8859], [74.8562, 12.8891]],                                            // Kadri temple → park
+  [[74.7966, 13.0094], [74.7918, 13.0048]],                                            // NITK → beach
+  [[74.7950, 13.0070], [74.8010, 13.0080]],                                            // Surathkal market → NH-66
+  [[74.8100, 12.9370], [74.8062, 12.9370]],                                            // Panambur beach road
+  [[74.8450, 12.8070], [74.8370, 12.7880]],                                            // Ullal → Someshwara
+  [[74.8730, 12.8470], [74.8585, 12.8560]],                                            // DC office → Pumpwell
+  [[74.7975, 13.0460], [74.8010, 13.0455]],                                            // Uchila link
+  [[74.8000, 13.0870], [74.7990, 13.0930]],                                            // Mulki town street
+].forEach((pts) => makeRoad(pts, 52, 0x8f97a1));
+
+/* ---- surf foam along the shoreline ---- */
+function makeFoam(latA, latB) {
+  const pts = [];
+  for (let lat = latA; lat >= latB; lat -= 0.006) {
+    const z = -(lat - C_LAT) * MPD_Z;
+    pts.push([C_LNG + (coastX(z) - 30) / MPD_X, lat]);
+  }
+  const verts = [], idx = [];
+  const p2 = pts.map(([lng, lat]) => ll(lng, lat));
+  p2.forEach((p, i) => {
+    verts.push(p.x - 45, 1.0, p.z, p.x + 45, 1.0, p.z);
+    if (i < p2.length - 1) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+  });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(verts), 3));
+  g.setIndex(idx); g.computeVertexNormals();
+  scene.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75 })));
+}
+makeFoam(13.28, 12.848);  // north of the estuary mouth (incl. Bengre spit)
+makeFoam(12.841, 12.74);  // south of the mouth (Ullal side)
+
+/* ---- NMPT breakwater arms ---- */
+{
+  const bw = (lngA, latA, lngB, latB) => {
+    const a = ll(lngA, latA), b = ll(lngB, latB);
+    const len = Math.hypot(b.x - a.x, b.z - a.z);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(len, 10, 60), new THREE.MeshLambertMaterial({ color: 0x6f6a63 }));
+    m.position.set((a.x + b.x) / 2, 3, (a.z + b.z) / 2);
+    m.rotation.y = -Math.atan2(b.z - a.z, b.x - a.x);
+    scene.add(m);
+  };
+  bw(74.806, 12.9315, 74.795, 12.9255);   // south arm
+  bw(74.805, 12.9410, 74.7945, 12.9360);  // north arm
+}
+
+/* ---- procedural city (instanced buildings) ---- */
+const ZONES = [
+  { lng: 74.843, lat: 12.868, r: 2400, n: 2300, hMin: 14, hMax: 70 },   // city core
+  { lng: 74.855, lat: 12.884, r: 1400, n: 500, hMin: 10, hMax: 32 },    // Kadri/Bejai
+  { lng: 74.796, lat: 13.007, r: 1500, n: 480, hMin: 10, hMax: 28 },    // Surathkal
+  { lng: 74.845, lat: 12.807, r: 1200, n: 320, hMin: 8, hMax: 22 },     // Ullal
+  { lng: 74.815, lat: 12.943, r: 1400, n: 340, hMin: 10, hMax: 26 },    // Panambur/Baikampady
+  { lng: 74.858, lat: 12.862, r: 1300, n: 420, hMin: 10, hMax: 30 },    // Kankanady/Pumpwell
+  { lng: 74.898, lat: 12.809, r: 1000, n: 200, hMin: 8, hMax: 20 },     // Deralakatte
+  { lng: 74.886, lat: 12.968, r: 1000, n: 150, hMin: 8, hMax: 16 },     // Bajpe
+  { lng: 74.802, lat: 13.093, r: 900, n: 220, hMin: 8, hMax: 18 },      // Mulki
+  { lng: 74.760, lat: 13.221, r: 800, n: 170, hMin: 8, hMax: 16 },      // Kaup
+  { lng: 74.782, lat: 13.145, r: 700, n: 120, hMin: 6, hMax: 14 },      // Padubidri
+];
+// coastal-town palette: warm creams, ochres, and washed pastels like real Kudla homes
+const bPalette = [0xfff6e5, 0xf6e2bd, 0xeccf9f, 0xf3d9c0, 0xe8b98a, 0xdfe8f0, 0xd8e6cf, 0xf0cfc2, 0xf7e6a8, 0xe6d2b8].map((c) => new THREE.Color(c));
+const roofPalette = [0xa0522d, 0x9c3a2a, 0xb5651d, 0x8e3b28, 0xaa5a35].map((c) => new THREE.Color(c));
+{
+  const placements = [];
+  let seed = 1;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  ZONES.forEach((zn) => {
+    const c = ll(zn.lng, zn.lat);
+    let placed = 0, tries = 0;
+    while (placed < zn.n && tries < zn.n * 4) {
+      tries++;
+      const a = rnd() * Math.PI * 2, rr = Math.sqrt(rnd()) * zn.r;
+      const x = c.x + Math.cos(a) * rr, z = c.z + Math.sin(a) * rr;
+      const h = heightAt(x, z);
+      if (h < 2.2 || h > 90) continue;
+      if (riverDist(x, z) < 180) continue;
+      let nearLm = false;
+      for (const l of LANDMARKS) if (Math.hypot(x - l.x, z - l.z) < 200) { nearLm = true; break; }
+      if (nearLm) continue;
+      const bh = zn.hMin + rnd() * (zn.hMax - zn.hMin);
+      placements.push({ x, z, y: h, w: 28 + rnd() * 34, d: 28 + rnd() * 34, h: bh, rot: rnd() * Math.PI,
+        col: bPalette[(rnd() * bPalette.length) | 0],
+        // low houses get sloped Mangalore-tile roofs; taller blocks stay flat
+        roof: bh < 26 && rnd() < 0.72 ? roofPalette[(rnd() * roofPalette.length) | 0] : null });
+      placed++;
+    }
+  });
+  const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial(), placements.length);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s3 = new THREE.Vector3(), p3 = new THREE.Vector3();
+  placements.forEach((p, i) => {
+    e.set(0, p.rot, 0); q.setFromEuler(e);
+    s3.set(p.w, p.h, p.d);
+    p3.set(p.x, p.y + p.h / 2 - 1, p.z);
+    m4.compose(p3, q, s3);
+    inst.setMatrixAt(i, m4);
+    inst.setColorAt(i, p.col);
+  });
+  scene.add(inst);
+  // slanted terracotta tile roofs (4-sided pyramids aligned to each house)
+  const roofed = placements.filter((p) => p.roof);
+  const rInst = new THREE.InstancedMesh(new THREE.ConeGeometry(0.74, 1, 4), new THREE.MeshLambertMaterial(), roofed.length);
+  roofed.forEach((p, i) => {
+    e.set(0, p.rot + Math.PI / 4, 0); q.setFromEuler(e);
+    const rr = Math.hypot(p.w, p.d);
+    s3.set(rr, 6 + (p.h % 5), rr);
+    p3.set(p.x, p.y + p.h - 1 + (6 + (p.h % 5)) / 2, p.z);
+    m4.compose(p3, q, s3);
+    rInst.setMatrixAt(i, m4);
+    rInst.setColorAt(i, p.roof);
+  });
+  scene.add(rInst);
+}
+
+/* ---- sea rocks (Rudra Shile at Someshwara, Bengre tip, lighthouse rocks) ---- */
+{
+  const clusters = [
+    [74.8355, 12.7865, 16, 280],  // Someshwara Rudra Shile
+    [74.8215, 12.8495, 10, 220],  // Bengre spit tip
+    [74.8095, 12.8800, 8, 200],   // Bengre / Tannirbhavi shore rocks
+    [74.7893, 13.0042, 10, 200],  // Surathkal lighthouse rocks
+    [74.7495, 13.2155, 12, 220],  // Kapu lighthouse rocks
+  ];
+  let n = 0; clusters.forEach((c) => (n += c[2]));
+  const inst = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(11, 0), new THREE.MeshLambertMaterial(), n);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s3 = new THREE.Vector3(), p3 = new THREE.Vector3();
+  const rockCols = [new THREE.Color(0x5a5350), new THREE.Color(0x6b625c), new THREE.Color(0x4a443f)];
+  let k = 0;
+  clusters.forEach(([lng, lat, cnt, spread], ci) => {
+    const c = ll(lng, lat);
+    for (let i = 0; i < cnt; i++) {
+      const a = hash2(ci * 31 + i, 7) * Math.PI * 2, rr = Math.sqrt(hash2(i, ci * 13 + 3)) * spread;
+      const x = c.x + Math.cos(a) * rr, z = c.z + Math.sin(a) * rr;
+      const s = 0.4 + hash2(i * 3, ci) * 1.1;
+      e.set(hash2(i, 1) * 3, hash2(i, 2) * 3, hash2(i, 4) * 3); q.setFromEuler(e);
+      s3.set(s, s * (0.55 + hash2(i, 5) * 0.5), s);
+      p3.set(x, hash2(i, 6) * 4 - 2, z);   // half-submerged in the surf
+      m4.compose(p3, q, s3);
+      inst.setMatrixAt(k, m4);
+      inst.setColorAt(k, rockCols[(i + ci) % 3]);
+      k++;
+    }
+  });
+  scene.add(inst);
+}
+
+/* ---- tetrapod seawall along Bengre beach ---- */
+{
+  const lats = [];
+  for (let lat = 12.8435; lat <= 12.8930; lat += 0.0011) lats.push(lat);
+  const count = lats.length * 2;
+  const inst = new THREE.InstancedMesh(new THREE.TetrahedronGeometry(10, 0), new THREE.MeshLambertMaterial(), count);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s3 = new THREE.Vector3(), p3 = new THREE.Vector3();
+  const tCols = [new THREE.Color(0xc4c0b6), new THREE.Color(0xb3afa5), new THREE.Color(0xd0ccc2)];
+  let k = 0;
+  lats.forEach((lat, i) => {
+    const z = -(lat - C_LAT) * MPD_Z;
+    for (let row = 0; row < 2; row++) {
+      const x = coastX(z) - 8 - row * 16 + (hash2(i, row) - 0.5) * 10;
+      e.set(hash2(i, row + 2) * 3, hash2(i, row + 4) * 3, hash2(i, row + 6) * 3);
+      q.setFromEuler(e);
+      const s = 0.7 + hash2(i, row + 8) * 0.5;
+      s3.set(s, s, s);
+      p3.set(x, 1.5 + hash2(i, row + 10) * 2, z + (hash2(i, row + 12) - 0.5) * 40);
+      m4.compose(p3, q, s3);
+      inst.setMatrixAt(k, m4);
+      inst.setColorAt(k, tCols[(i + row) % 3]);
+      k++;
+    }
+  });
+  scene.add(inst);
+}
+
+/* ---- coconut palms along the beaches ---- */
+{
+  const beaches = LANDMARKS.filter((l) => l.cat === "beach");
+  const trunks = [], tops = [];
+  beaches.forEach((b, bi) => {
+    for (let i = 0; i < 34; i++) {
+      const a = hash2(bi * 17 + i, 9) * Math.PI * 2, rr = 90 + Math.sqrt(hash2(i, bi * 7 + 1)) * 420;
+      const x = b.x + Math.cos(a) * rr, z = b.z + Math.sin(a) * rr;
+      const h = heightAt(x, z);
+      if (h < 1.0 || h > 7 || x < coastX(z) + 45) continue;     // land only, near the sand
+      const s = 0.8 + hash2(i, bi) * 0.7, lean = (hash2(i * 5, bi) - 0.5) * 0.3;
+      trunks.push({ x, z, y: h, s, lean });
+      tops.push({ x: x + lean * 34 * s, z, y: h + 32 * s, s });
+    }
+  });
+  const tInst = new THREE.InstancedMesh(new THREE.CylinderGeometry(1.5, 2.4, 34, 5), new THREE.MeshLambertMaterial({ color: 0x8d6e63 }), trunks.length);
+  const cInst = new THREE.InstancedMesh(new THREE.SphereGeometry(9, 7, 5), new THREE.MeshLambertMaterial(), tops.length);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s3 = new THREE.Vector3(), p3 = new THREE.Vector3();
+  const pCols = [new THREE.Color(0x2e7d32), new THREE.Color(0x3c8f3f), new THREE.Color(0x256e2b)];
+  trunks.forEach((t, i) => {
+    e.set(0, 0, t.lean); q.setFromEuler(e);
+    s3.set(t.s, t.s, t.s); p3.set(t.x, t.y + 17 * t.s, t.z);
+    m4.compose(p3, q, s3);
+    tInst.setMatrixAt(i, m4);
+  });
+  const q0 = new THREE.Quaternion();
+  tops.forEach((t, i) => {
+    s3.set(t.s, t.s * 0.45, t.s); p3.set(t.x, t.y, t.z);
+    m4.compose(p3, q0, s3);
+    cInst.setMatrixAt(i, m4);
+    cInst.setColorAt(i, pCols[i % 3]);
+  });
+  scene.add(tInst, cInst);
+}
+
+/* ---- trees ---- */
+{
+  const spots = [];
+  let seed = 7;
+  const rnd = () => (seed = (seed * 48271) % 2147483647) / 2147483647;
+  let tries = 0;
+  while (spots.length < 3600 && tries < 30000) {
+    tries++;
+    const x = TX0 + rnd() * (TX1 - TX0), z = TZ0 + rnd() * (TZ1 - TZ0);
+    const h = heightAt(x, z);
+    if (h < 2.5) continue;
+    if (riverDist(x, z) < 120) continue;
+    const green = h > 20 || fbm(x * 0.0011, z * 0.0011) > 0.5;
+    if (!green) continue;
+    spots.push({ x, z, y: h, s: 0.7 + rnd() * 0.9, g: rnd() });
+  }
+  const inst = new THREE.InstancedMesh(new THREE.ConeGeometry(26, 62, 6), new THREE.MeshLambertMaterial(), spots.length);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s3 = new THREE.Vector3(), p3 = new THREE.Vector3();
+  const gcols = [new THREE.Color(0x2f6d33), new THREE.Color(0x448840), new THREE.Color(0x255a2a)];
+  spots.forEach((p, i) => {
+    s3.set(p.s, p.s, p.s);
+    p3.set(p.x, p.y + 31 * p.s, p.z);
+    m4.compose(p3, q, s3);
+    inst.setMatrixAt(i, m4);
+    inst.setColorAt(i, gcols[(p.g * 3) | 0]);
+  });
+  scene.add(inst);
+}
+
+/* ---- clouds ---- */
+const clouds = [];
+{
+  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  for (let i = 0; i < 9; i++) {
+    const g = new THREE.Group();
+    const n = 3 + (i % 3);
+    for (let j = 0; j < n; j++) {
+      const s = new THREE.Mesh(new THREE.DodecahedronGeometry(260 + hash2(i, j) * 340, 0), mat);
+      s.position.set(j * 380 - n * 160, hash2(j, i) * 120, hash2(i * 3, j) * 260);
+      s.scale.y = 0.55;
+      g.add(s);
+    }
+    g.position.set(TX0 + hash2(i, 99) * (TX1 - TX0), 2400 + hash2(i, 5) * 900, TZ0 + hash2(i, 42) * (TZ1 - TZ0));
+    scene.add(g);
+    clouds.push(g);
+  }
+}
+
+/* ==================== LANDMARK MODEL BUILDERS ==================== */
+const ANIMATED = [];
+const M = (c) => new THREE.MeshLambertMaterial({ color: c });
+function box(w, h, d, c, x = 0, y = 0, z = 0) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), M(c)); m.position.set(x, y + h / 2, z); return m; }
+function cyl(rt, rb, h, c, x = 0, y = 0, z = 0, seg = 12) { const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), M(c)); m.position.set(x, y + h / 2, z); return m; }
+function cone(r, h, c, x = 0, y = 0, z = 0, seg = 12, rotY = 0) { const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, seg), M(c)); m.position.set(x, y + h / 2, z); m.rotation.y = rotY; return m; }
+function sph(r, c, x = 0, y = 0, z = 0) { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 9), M(c)); m.position.set(x, y, z); return m; }
+function dome(r, c, x = 0, y = 0, z = 0) { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 14, 9, 0, Math.PI * 2, 0, Math.PI / 2), M(c)); m.position.set(x, y, z); return m; }
+function palm(x, z, h = 9) {
+  const g = new THREE.Group();
+  const t = cyl(0.35, 0.55, h, 0x8d6e63, 0, 0, 0, 6); t.rotation.z = 0.12; g.add(t);
+  for (let i = 0; i < 6; i++) {
+    const leaf = box(5.5, 0.2, 1.3, 0x2e7d32);
+    leaf.position.set(Math.cos((i / 6) * Math.PI * 2) * 2.4 + h * 0.12, h + 0.4, Math.sin((i / 6) * Math.PI * 2) * 2.4);
+    leaf.rotation.y = -(i / 6) * Math.PI * 2; leaf.rotation.z = 0.35;
+    g.add(leaf);
+  }
+  g.position.set(x, 0, z);
+  return g;
+}
+function treeM(x, z, s = 1) { const g = new THREE.Group(); g.add(cyl(0.5 * s, 0.7 * s, 4 * s, 0x795548, 0, 0, 0, 6)); g.add(sph(3.2 * s, 0x388e3c, 0, 5.5 * s, 0)); g.position.set(x, 0, z); return g; }
+function kalasha(x, y, z, s = 1) { const g = new THREE.Group(); g.add(cyl(0.35 * s, 0.5 * s, 1.6 * s, 0xffd54f, x, y, z, 8)); g.add(sph(0.55 * s, 0xffd54f, x, y + 2 * s, z)); return g; }
+
+const BUILDERS = {
+  // Tulu-nadu temple: walled prakara with tiled top, gatehouse, inner sanctum
+  // with stacked copper pyramid roofs and a golden sthupi — like Kadri/Sharavu/Mangaladevi
+  temple() {
+    const g = new THREE.Group();
+    g.add(box(48, 1, 48, 0xcabf9f, 0, -0.5, 0));                     // courtyard
+    // prakara (compound) wall with terracotta tiled coping
+    [[0, -23, 46, 3], [0, 23, 46, 3], [-23, 0, 3, 46], [23, 0, 3, 46]].forEach(([x, z, w, d]) => {
+      g.add(box(w, 3.2, d, 0xf2ead6, x, 0, z));
+      const tile = box(w + 0.8, 0.7, d + 0.8, 0xa0522d, x, 3.2, z);
+      g.add(tile);
+    });
+    // gatehouse (padipura) with its own little two-tier tiled roof
+    g.add(box(8, 5.5, 4, 0xf2ead6, 0, 0, 23));
+    const gr1 = cone(6.4, 3, 0xa0522d, 0, 5.5, 23, 4, Math.PI / 4); gr1.scale.z = 0.62; g.add(gr1);
+    const gr2 = cone(3.6, 2.4, 0x8c5a2b, 0, 8.2, 23, 4, Math.PI / 4); gr2.scale.z = 0.62; g.add(gr2);
+    // pillared outer mantapa ring
+    g.add(box(30, 4.5, 30, 0xf7f3e8, 0, 0, 0));
+    const mr = cone(23, 5.5, 0xa0522d, 0, 4.5, 0, 4, Math.PI / 4); mr.scale.y = 0.75; g.add(mr);
+    // inner sanctum (garbhagriha) rising through, with two copper pyramid tiers
+    g.add(box(15, 10, 15, 0xf7f3e8, 0, 2, 0));
+    g.add(cone(12, 5.5, 0x8c5a2b, 0, 12, 0, 4, Math.PI / 4));
+    g.add(cone(7.5, 5, 0xb87333, 0, 17, 0, 4, Math.PI / 4));
+    g.add(box(8.5, 0.8, 8.5, 0xffd54f, 0, 16.6, 0));                 // gold band between tiers
+    g.add(kalasha(0, 22.2, 0, 1.5));
+    // gold-clad dhwaja sthamba (flag pillar) + balipeeta
+    g.add(cyl(0.55, 0.7, 15, 0xffd54f, 0, 1, 13, 8), box(2.2, 1.6, 2.2, 0x8d6e63, 0, 1, 8.5));
+    // deepa sthambha (lamp pillar) by the gate
+    g.add(cyl(0.4, 0.6, 7, 0x6d5843, 7, 1, 19, 6), sph(0.7, 0xffb300, 7, 8.8, 19));
+    return g;
+  },
+  // Kadri Manjunath complex: tiered temple + nine ponds + Kadri Park + hilltop Shiva statue & caves
+  kadri() {
+    const g = new THREE.Group();
+    g.add(BUILDERS.temple());
+
+    // the nine sacred spring-fed ponds, terraced behind (east of) the temple
+    const pondPos = [[-26, -26], [-14, -28], [-2, -27], [10, -28], [22, -26], [-20, -38], [-6, -39], [8, -38], [20, -37]];
+    pondPos.forEach(([x, z], i) => {
+      const rim = new THREE.Mesh(new THREE.CylinderGeometry(4.6, 4.6, 1.4, 10), M(0xcfc4a4));
+      rim.position.set(x, 0.7, z); g.add(rim);
+      const wtr = new THREE.Mesh(new THREE.CylinderGeometry(3.8, 3.8, 0.5, 10), M(i % 2 ? 0x4fc3f7 : 0x39a9db));
+      wtr.position.set(x, 1.35, z); g.add(wtr);
+    });
+    // stepped ghat down to the main pond
+    for (let i = 0; i < 3; i++) g.add(box(14, 1, 2.2, 0xd7ccc8, -2, i, -21 + i * 2));
+
+    // Kadri Park in front: lawn, trees, musical fountain
+    const lawn = new THREE.Mesh(new THREE.CylinderGeometry(17, 17, 0.7, 14), M(0x7cb342));
+    lawn.position.set(-34, 0.35, 22); g.add(lawn);
+    g.add(treeM(-42, 14), treeM(-26, 16, 1.15), treeM(-44, 28), treeM(-30, 32, 1.2), treeM(-38, 22, 0.9));
+    g.add(cyl(2.6, 3.2, 1.2, 0x90a4ae, -34, 0.7, 22, 12), cone(0.8, 4, 0x81d4fa, -34, 1.9, 22, 8));
+
+    // hilltop mound with the tall seated Shiva statue overlooking the temple
+    const mound = cone(16, 10, 0x8fae62, 34, 0, -18, 9); mound.scale.y = 0.9; g.add(mound);
+    const st = new THREE.Group();
+    st.add(cyl(6, 7, 1.8, 0xf5f0e6, 0, 0, 0, 10));                            // plinth
+    const lotus = cyl(4.6, 3.4, 1.6, 0xf8bbd0, 0, 1.8, 0, 10); st.add(lotus); // lotus seat
+    const legs = sph(3.4, 0x9fb9d0, 0, 4.6, 0); legs.scale.set(1.35, 0.55, 1); st.add(legs); // crossed legs
+    const torso = cyl(1.9, 2.6, 5, 0x9fb9d0, 0, 5.4, 0, 10); st.add(torso);
+    [[-1, 1], [1, -1]].forEach(([sx]) => {                                     // arms resting on knees
+      const arm = cyl(0.55, 0.55, 4.2, 0x9fb9d0, sx * 2.6, 5.2, 0.8, 8);
+      arm.rotation.z = sx * 0.5; st.add(arm);
+    });
+    st.add(sph(1.5, 0x9fb9d0, 0, 11.6, 0));                                    // head
+    st.add(cone(0.9, 1.8, 0x37474f, 0, 12.6, 0, 8));                           // jata (hair knot)
+    st.add(cyl(0.09, 0.09, 3.4, 0xffd54f, 1.6, 8.4, 0.4, 6));                  // trishul shaft
+    [[-0.5], [0], [0.5]].forEach(([dx]) => st.add(cone(0.16, 1.1, 0xffd54f, 1.6 + dx * 0.5, 11.8, 0.4, 6)));
+    st.position.set(34, 8.2, -18);
+    st.rotation.y = -2.2; // gazing down over the temple
+    g.add(st);
+
+    // Pandava cave mouths in the hillside
+    [[24, -26], [42, -24]].forEach(([x, z]) => {
+      const cave = new THREE.Mesh(new THREE.SphereGeometry(2.6, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2), M(0x4e4038));
+      cave.position.set(x, 0.4, z); g.add(cave);
+    });
+    return g;
+  },
+  // Kudroli Gokarnanatha: Chola-style — white stepped gopuram tower with gold
+  // ornament bands, barrel-vault gold shikhara, flanking shrines, walled court
+  gopuram() {
+    const g = new THREE.Group();
+    g.add(box(64, 1, 48, 0xe8e8e8, 0, -0.5, 0));                     // paved court
+    [[0, -23, 62, 2.5], [0, 23, 62, 2.5], [-31, 0, 2.5, 46], [31, 0, 2.5, 46]].forEach(([x, z, w, d]) =>
+      g.add(box(w, 2.8, d, 0xfafafa, x, 0, z)));
+    // main gopuram: five tapering white tiers with gold trim lines
+    const tiers = [[26, 6, 16], [22, 5, 13.5], [18, 4.5, 11], [14, 4, 9], [10.5, 3.5, 7]];
+    let y = 0;
+    tiers.forEach(([w, h, d], i) => {
+      g.add(box(w, h, d, i % 2 ? 0xf5f5f5 : 0xffffff, 0, y, 0));
+      y += h;
+      g.add(box(w - 1, 0.6, d - 1, 0xffc107, 0, y - 0.3, 0));        // gold band
+    });
+    // barrel-vault gold shikhara with kalasha row
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.4, 8, 10, 1, false), M(0xffc107));
+    barrel.rotation.z = Math.PI / 2; barrel.position.y = y + 2.6; g.add(barrel);
+    [-2.6, 0, 2.6].forEach((x) => g.add(kalasha(x, y + 5.6, 0, 0.75)));
+    // arched white entrance through the base
+    g.add(box(6, 8, 17, 0x263238, 0, 0, 0.2));
+    // twin flanking shrines with gold domes
+    [-20, 20].forEach((x) => {
+      g.add(box(10, 8, 10, 0xffffff, x, 0, -8));
+      g.add(dome(4.2, 0xffc107, x, 8, -8));
+      g.add(kalasha(x, 11.4, -8, 0.7));
+    });
+    // sanctum hall behind the tower
+    g.add(box(24, 9, 16, 0xffffff, 0, 0, -16));
+    g.add(dome(5.6, 0xffc107, 0, 9, -16), kalasha(0, 13.8, -16, 0.9));
+    // ornamental gold gate posts
+    [-4.5, 4.5].forEach((x) => g.add(cyl(0.5, 0.5, 6, 0xffc107, x, 0, 22, 8)));
+    return g;
+  },
+  // Kateel: compact Tulu temple on the islet + the pilgrim bridge over the Nandini
+  kateel() {
+    const g = new THREE.Group();
+    const t = BUILDERS.temple();
+    t.scale.setScalar(0.72);
+    g.add(t);
+    // bridge east to the river bank, on stone piers
+    const br = new THREE.Group();
+    br.add(box(34, 1, 4, 0xb0a89a, 0, 3, 0));
+    br.add(box(34, 0.8, 0.5, 0xc62828, 0, 4, 1.9), box(34, 0.8, 0.5, 0xc62828, 0, 4, -1.9));
+    for (let i = 0; i < 5; i++) br.add(box(1.6, 4, 3, 0x8d8d8d, -14 + i * 7, -1, 0));
+    br.position.set(33, 0, 2);
+    g.add(br);
+    return g;
+  },
+  // DC office complex: U-shaped block around a forecourt with a flag roundabout,
+  // gated compound wall, driveway, parking bay and lawns
+  govt() {
+    const g = new THREE.Group();
+    // walled compound with paved ground
+    g.add(box(78, 0.8, 62, 0xd8d2c2, 0, -0.4, 0));
+    [[0, -30, 76, 2], [-38, 0, 2, 60], [38, 0, 2, 60], [-26, 30, 24, 2], [26, 30, 24, 2]].forEach(([x, z, w, d]) =>
+      g.add(box(w, 2.6, d, 0xe9e2d0, x, 0, z)));
+    // gate posts + entrance arch on the open (south) side
+    [-13, 13].forEach((x) => g.add(box(2.6, 5.5, 2.6, 0xcfc4b0, x, 0, 30)));
+    g.add(box(27, 1.6, 2, 0xb0a89a, 0, 5.5, 30));
+    // main block (north): Kerala-style civic building — white colonnade,
+    // two tiers of broad red hipped roofs, central emblem tower with statue
+    const RED = 0x8e2f24, TILE = 0x9c3a2a;
+    g.add(box(50, 9, 18, 0xfdfbf4, 0, 0, -18));                       // ground hall
+    for (let i = 0; i < 9; i++) g.add(box(1.3, 8.5, 1.3, 0xffffff, -22 + i * 5.5, 0, -8.6)); // front colonnade
+    const r1 = cone(37, 6.5, TILE, 0, 9, -17, 4, Math.PI / 4); r1.scale.z = 0.52; g.add(r1); // broad lower roof
+    g.add(box(34, 6, 13, 0xfdfbf4, 0, 11.5, -18));                    // upper storey
+    const r2 = cone(25, 5.5, RED, 0, 17.5, -18, 4, Math.PI / 4); r2.scale.z = 0.5; g.add(r2); // upper roof
+    // front gable over the entrance
+    const gab = cone(7, 4.5, RED, 0, 9.5, -9.5, 4, Math.PI / 4); gab.scale.z = 0.5; g.add(gab);
+    // central tower: white with red-brick pilaster corners + emblem panel
+    g.add(box(9, 15, 9, 0xfdfbf4, 0, 16, -18));
+    [[-4.2, -4.2], [4.2, -4.2], [-4.2, 4.2], [4.2, 4.2]].forEach(([dx, dz]) =>
+      g.add(box(1.3, 15, 1.3, RED, dx, 16, -18 + dz)));
+    const emblem = new THREE.Mesh(new THREE.CircleGeometry(2.1, 14), M(0x7b1f14));
+    emblem.position.set(0, 25, -13.35); g.add(emblem);
+    // stepped tower cap with gold statue finial
+    g.add(box(11.5, 1.4, 11.5, RED, 0, 31, -18));
+    g.add(box(8, 2.6, 8, 0xfdfbf4, 0, 32.4, -18));
+    const cap = cone(6.6, 3.2, RED, 0, 35, -18, 4, Math.PI / 4); g.add(cap);
+    g.add(sph(0.9, 0xffc107, 0, 39.3, -18), cone(0.7, 1.6, 0xffc107, 0, 39.8, -18, 6));
+    // side wings framing the forecourt, with their own red hipped roofs
+    [-27, 27].forEach((x) => {
+      g.add(box(12, 9, 30, 0xf7f1e2, x, 0, -3));
+      const wr = cone(9.2, 4.5, TILE, x, 9, -3, 4, Math.PI / 4); wr.scale.z = 1.9; wr.scale.x = 0.8; g.add(wr);
+    });
+    // driveway from the gate around the flag roundabout
+    g.add(box(8, 0.3, 34, 0x8f959d, 0, 0.15, 12));
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 0.35, 18), M(0x8f959d));
+    ring.position.set(0, 0.18, 4); g.add(ring);
+    const isle = new THREE.Mesh(new THREE.CylinderGeometry(5.5, 5.5, 0.9, 16), M(0x7cb342));
+    isle.position.set(0, 0.45, 4); g.add(isle);
+    // tall flag mast with the tricolour at the roundabout centre
+    g.add(cyl(0.22, 0.28, 16, 0xeceff1, 0, 0.9, 4, 6));
+    g.add(box(5, 1.1, 0.15, 0xff9933, 2.6, 16.1, 4), box(5, 1.1, 0.15, 0xffffff, 2.6, 15.0, 4), box(5, 1.1, 0.15, 0x138808, 2.6, 13.9, 4));
+    // parking bay with a few cars (east side)
+    g.add(box(20, 0.3, 10, 0x9aa0a8, 24, 0.15, 18));
+    [[0xd32f2f, 18], [0xfafafa, 23], [0x1565c0, 28]].forEach(([c, x]) => {
+      g.add(box(3.6, 1.5, 1.9, c, x, 0.3, 18));
+      g.add(box(2.1, 1, 1.7, c, x - 0.2, 1.7, 18));
+    });
+    // lawns and trees along the west side
+    const lawn = new THREE.Mesh(new THREE.CylinderGeometry(8, 8, 0.6, 12), M(0x7cb342));
+    lawn.position.set(-26, 0.3, 18); g.add(lawn);
+    g.add(treeM(-30, 22, 0.9), treeM(-22, 14, 1.05), treeM(-31, 12, 0.8), treeM(34, -24, 0.9), treeM(-34, -24, 0.9));
+    return g;
+  },
+  church() {
+    const g = new THREE.Group();
+    g.add(box(14, 10, 28, 0xfffdf5));
+    // proper gabled roof: two sloped slabs meeting at a ridge over the nave
+    [[-1, 1], [1, -1]].forEach(([s]) => {
+      const slab = box(8.6, 0.8, 29.5, 0xb71c1c, s * 3.55, 11.4, 0);
+      slab.rotation.z = s * 0.62;
+      g.add(slab);
+    });
+    g.add(box(11, 2, 27, 0xfffdf5, 0, 9, 0));                          // eaves band
+    g.add(box(7, 20, 7, 0xfffdf5, 0, 0, 17));                          // bell tower
+    g.add(cone(5, 6.5, 0xb71c1c, 0, 20, 17, 4, Math.PI / 4));
+    g.add(box(0.7, 4.5, 0.7, 0xffd54f, 0, 26.5, 17), box(3, 0.7, 0.7, 0xffd54f, 0, 28.8, 17));
+    return g;
+  },
+  // Rosario Cathedral: basilica with the great dome modelled on St Peter's
+  cathedral() {
+    const g = new THREE.Group();
+    g.add(box(18, 11, 34, 0xfffdf5));
+    [[-1, 1], [1, -1]].forEach(([s]) => {
+      const slab = box(10.6, 0.8, 35.5, 0x9c6b4f, s * 4.6, 12.6, 0);
+      slab.rotation.z = s * 0.58;
+      g.add(slab);
+    });
+    // dome on a colonnaded drum at the crossing
+    g.add(cyl(6.4, 6.4, 6, 0xfffdf5, 0, 12, -2, 14));
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      g.add(box(0.8, 5.5, 0.8, 0xf0ead8, Math.cos(a) * 6.2, 12.2, -2 + Math.sin(a) * 6.2));
+    }
+    g.add(dome(6.6, 0x8fa7b8, 0, 18, -2));
+    g.add(cyl(1.1, 1.1, 2.6, 0xfffdf5, 0, 24.4, -2, 8));               // lantern
+    g.add(box(0.6, 3.4, 0.6, 0xffd54f, 0, 27.2, -2), box(2.2, 0.6, 0.6, 0xffd54f, 0, 29, -2));
+    // twin front towers with small domes
+    [-7, 7].forEach((x) => {
+      g.add(box(5.5, 17, 5.5, 0xfffdf5, x, 0, 18));
+      g.add(dome(3, 0x8fa7b8, x, 17, 18));
+      g.add(box(0.5, 2.6, 0.5, 0xffd54f, x, 21.2, 18));
+    });
+    // grand entrance pediment
+    for (let i = 0; i < 4; i++) g.add(cyl(0.7, 0.7, 9, 0xffffff, -4.5 + i * 3, 0, 21.5, 8));
+    const ped = cone(6.5, 3, 0xf0ead8, 0, 9, 21, 4, Math.PI / 4); ped.scale.z = 0.5; g.add(ped);
+    return g;
+  },
+  mosque() {
+    const g = new THREE.Group();
+    g.add(box(26, 10, 20, 0xf1f8e9), dome(7, 0x2e7d32, 0, 10, 0), kalasha(0, 17.5, 0, 0.8));
+    [-15, 15].forEach((x) => { g.add(cyl(1.4, 1.4, 20, 0xffffff, x, 0, 8, 8), dome(1.9, 0x2e7d32, x, 20, 8)); });
+    return g;
+  },
+  lighthouse() {
+    const g = new THREE.Group();
+    g.add(cyl(3.6, 4.4, 7, 0xd32f2f), cyl(3.1, 3.6, 7, 0xffffff, 0, 7), cyl(2.6, 3.1, 7, 0xd32f2f, 0, 14));
+    g.add(box(4.6, 3.4, 4.6, 0xbbdefb, 0, 21), cone(3.4, 3, 0xd32f2f, 0, 24.4, 0, 8));
+    g.add(palm(9, 4), palm(-8, -5));
+    return g;
+  },
+  beach() {
+    const g = new THREE.Group();
+    const sand = new THREE.Mesh(new THREE.CylinderGeometry(30, 30, 0.8, 18), M(0xf3e5ab)); sand.position.y = 0.4; g.add(sand);
+    g.add(palm(-10, -6), palm(8, 4), palm(-2, 12), palm(15, -8, 8));
+    g.add(cyl(0.25, 0.25, 7, 0x8d6e63, 3, 0.5, -3, 5), cone(5, 2.6, 0xef5350, 3, 6.5, -3, 8));
+    return g;
+  },
+  beach_kite() {
+    const g = BUILDERS.beach();
+    [[0x29b6f6, -6, 26, 5], [0xef5350, 6, 32, -4], [0xffca28, 0, 38, 10]].forEach(([c, x, y, z], i) => {
+      const k = new THREE.Mesh(new THREE.OctahedronGeometry(3.2), M(c));
+      k.scale.set(1, 1.5, 0.15); k.position.set(x, y, z);
+      k.userData.kite = { baseY: y, phase: i * 2.1 };
+      g.add(k); ANIMATED.push(k);
+    });
+    return g;
+  },
+  beach_surf() {
+    const g = BUILDERS.beach();
+    [[0xff7043, -12, 2], [0x26c6da, -14, 6], [0xffee58, -10, 8]].forEach(([c, x, z]) => {
+      const b = box(1.8, 6.5, 0.5, c, x, 0, z); b.rotation.z = 0.12; g.add(b);
+    });
+    return g;
+  },
+  office() {
+    const g = new THREE.Group();
+    g.add(box(20, 44, 20, 0x90caf9));
+    for (let y = 5; y < 44; y += 6) g.add(box(20.4, 1, 20.4, 0x1565c0, 0, y));
+    g.add(box(28, 8, 22, 0xcfd8dc, 0, 0, 16), box(6, 2.5, 0.8, 0x1a237e, 0, 45));
+    return g;
+  },
+  refinery() {
+    const g = new THREE.Group();
+    [-12, -4, 4].forEach((x, i) => g.add(cyl(2.6, 2.6, 26 + i * 4, 0xb0bec5, x, 0, 0, 10)));
+    g.add(cyl(0.9, 0.9, 44, 0x90a4ae, 14, 0, -4, 6));
+    const flame = cone(2.2, 6, 0xff9800, 14, 44, -4, 6);
+    flame.userData.flame = true; g.add(flame); ANIMATED.push(flame);
+    g.add(sph(5, 0xeceff1, -6, 5, 14), sph(5, 0xeceff1, 6, 5, 14), box(18, 6, 10, 0x78909c, 8, 0, 8));
+    return g;
+  },
+  port() {
+    const g = new THREE.Group();
+    [-14, 6].forEach((x) => {
+      const c = new THREE.Group();
+      c.add(box(1.4, 20, 1.4, 0x1976d2, -4), box(1.4, 20, 1.4, 0x1976d2, 4), box(10, 1.6, 2, 0x1976d2, 0, 20));
+      const jib = box(16, 1.2, 1.6, 0x2196f3, 5, 22); jib.rotation.z = 0.28; c.add(jib);
+      c.position.x = x; g.add(c);
+    });
+    const cols = [0xe53935, 0x43a047, 0xfb8c00, 0x3949ab];
+    for (let i = 0; i < 8; i++) g.add(box(5, 2.4, 2.4, cols[i % 4], -16 + (i % 4) * 6, ((i / 4) | 0) * 2.4, 10));
+    const ship = new THREE.Group();
+    ship.add(box(34, 4, 9, 0x37474f), box(6, 7, 8, 0xeceff1, -11, 4));
+    for (let i = 0; i < 4; i++) ship.add(box(5, 2.2, 7, cols[(i + 1) % 4], 2 + i * 5.6, 4));
+    ship.position.set(4, 0, -16); g.add(ship);
+    return g;
+  },
+  silos() {
+    const g = new THREE.Group();
+    [-9, -3, 3, 9].forEach((x) => { g.add(cyl(2.6, 2.6, 18, 0xfafafa, x, 0, 0, 10), cone(2.6, 2.5, 0x90a4ae, x, 18, 0, 10)); });
+    g.add(box(16, 26, 10, 0xcfd8dc, 0, 0, -14));
+    return g;
+  },
+  hotel() {
+    const g = new THREE.Group();
+    g.add(box(16, 34, 14, 0xf3e2c8));                                 // warm tower
+    for (let y = 4; y < 34; y += 4.2) g.add(box(16.5, 0.9, 14.5, 0x8d6e63, 0, y, 0));
+    g.add(box(10, 3.2, 1, 0xc62828, 0, 35, 0));                       // rooftop sign
+    g.add(box(12, 3.5, 8, 0xd7ccc8, 0, 0, 11));                       // porte-cochère
+    [-4.5, 4.5].forEach((x) => g.add(cyl(0.6, 0.6, 3.4, 0xfff8e1, x, 0, 14, 6)));
+    const pool = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 0.8, 12), M(0x4fc3f7));
+    pool.position.set(14, 0.4, -2); g.add(pool);                       // pool deck
+    g.add(box(14, 0.4, 12, 0xefe0c2, 14, 0, 6));
+    g.add(palm(19, -7, 7), palm(9, -8, 6));
+    return g;
+  },
+  twintowers() {
+    const g = new THREE.Group();
+    [-11, 11].forEach((x) => {
+      g.add(box(13, 62, 13, 0xdde7ee, x, 0, 0));
+      for (let y = 4; y < 60; y += 4) g.add(box(13.5, 0.8, 13.5, 0x4a7fa5, x, y, 0));
+      const crown = new THREE.Mesh(new THREE.CylinderGeometry(6.8, 6.8, 4, 12, 1, false, 0, Math.PI), M(0x4a7fa5));
+      crown.rotation.z = Math.PI / 2; crown.rotation.y = Math.PI / 2;
+      crown.position.set(x, 62, 0); g.add(crown);                     // curved crown
+    });
+    g.add(box(9, 3, 10, 0xcfd8dc, 0, 0, 0));                          // linking podium
+    g.add(box(30, 4, 20, 0xe8e0d3, 0, 0, 14));                        // clubhouse base
+    return g;
+  },
+  mall() {
+    const g = new THREE.Group();
+    g.add(box(34, 16, 42, 0xb3e5fc), box(35, 2, 43, 0x455a64, 0, 7), box(35, 2, 43, 0x455a64, 0, 13));
+    g.add(box(12, 5, 2, 0xff4081, 0, 17, 21), box(16, 4, 6, 0x546e7a, 0, 0, 24));
+    return g;
+  },
+  market() {
+    const g = new THREE.Group();
+    const cols = [0xef5350, 0x66bb6a, 0xffca28, 0x42a5f5, 0xab47bc, 0x26a69a];
+    for (let r = 0; r < 2; r++)
+      for (let i = 0; i < 5; i++) {
+        g.add(box(6, 3.5, 5, 0xefebe9, -14 + i * 7, 0, r * 10 - 5));
+        const awn = box(7, 0.5, 6, cols[(i + r) % 6], -14 + i * 7, 3.6, r * 10 - 5);
+        awn.rotation.x = 0.18; g.add(awn);
+      }
+    return g;
+  },
+  // Mangaladevi at jaatre time: temple + wooden ratha (temple car) + fair stalls
+  mangaladevi() {
+    const g = new THREE.Group();
+    g.add(BUILDERS.temple());
+    // the ratha: wooden base on big wheels, tiered red-and-gold canopy
+    const r = new THREE.Group();
+    [[-3, -2.6], [3, -2.6], [-3, 2.6], [3, 2.6]].forEach(([wx, wz]) => {
+      const wheel = cyl(2.1, 2.1, 0.9, 0x4e342e, wx, 0, wz, 10);
+      wheel.rotation.z = Math.PI / 2; wheel.position.y = 2.1; r.add(wheel);
+    });
+    r.add(box(7.5, 2.6, 6.5, 0x6d4c41, 0, 2.8, 0));
+    r.add(box(6.2, 1.2, 5.4, 0xffd54f, 0, 5.4, 0));
+    r.add(cone(4.6, 4, 0xc62828, 0, 6.6, 0, 8), cone(3.3, 3.4, 0xef6c00, 0, 10.2, 0, 8), cone(2.1, 2.8, 0xc62828, 0, 13.2, 0, 8));
+    r.add(kalasha(0, 16.2, 0, 0.9));
+    [[-4, 0.5], [4, 0.5]].forEach(([x]) => r.add(cyl(0.12, 0.12, 6, 0x8d6e63, x, 2.8, 3.4, 5)));
+    r.position.set(0, 0, 32); r.rotation.y = 0.1;
+    g.add(r);
+    // jaatre fair: colourful stalls flanking the approach
+    const stallCols = [0xef5350, 0xffca28, 0x66bb6a, 0x42a5f5, 0xec407a, 0x26a69a];
+    [[-14, 24], [-15, 32], [-13, 40], [14, 24], [15, 32], [13, 40]].forEach(([x, z], i) => {
+      g.add(box(4.5, 3, 3.6, 0xfff3e0, x, 0, z));
+      const awn = box(5.2, 0.45, 4.4, stallCols[i % 6], x, 3.1, z);
+      awn.rotation.x = 0.2; g.add(awn);
+    });
+    // strings of pennant flags across the approach
+    for (let i = 0; i < 9; i++) {
+      const p = cone(0.5, 1.1, stallCols[i % 6], -12 + i * 3, 7.5, 27, 4);
+      p.rotation.x = Math.PI; g.add(p);
+    }
+    [[-12, 27], [12, 27]].forEach(([x, z]) => g.add(cyl(0.14, 0.14, 8, 0x8d6e63, x, 0, z, 5)));
+    // giant festival oil lamp
+    g.add(cyl(0.5, 0.9, 6.5, 0x8a6d3b, 0, 0, 22, 8), sph(0.8, 0xffb300, 0, 7.6, 22));
+    return g;
+  },
+  // NITK Surathkal: main building with clock tower, department rows, hostel blocks,
+  // sports oval, pool, water tank and the NH-66 gate
+  nitk() {
+    const g = new THREE.Group();
+    // main building (beige, central tower)
+    g.add(box(34, 9, 12, 0xf0e8d8, 0, 0, -6));
+    g.add(box(35, 1.2, 13, 0xb98d5f, 0, 9, -6));
+    g.add(box(7, 17, 7, 0xe3d2b4, 0, 0, -6));
+    g.add(box(8, 1.4, 8, 0x8d6e63, 0, 17, -6));
+    const clk = new THREE.Mesh(new THREE.CircleGeometry(1.7, 12), M(0xfffde7));
+    clk.position.set(0, 13.5, -2.4); g.add(clk);
+    // department blocks
+    [[-26, -22], [0, -24], [26, -22]].forEach(([x, z]) => {
+      g.add(box(16, 6.5, 9, 0xefe3cd, x, 0, z));
+      g.add(box(16.6, 0.9, 9.6, 0xb98d5f, x, 6.5, z));
+    });
+    // hostel row (the famous blocks)
+    for (let i = 0; i < 5; i++) g.add(box(7, 11, 7, 0xf0cfa0, -34 + i * 8.6, 0, 16));
+    // sports oval with track
+    const track = new THREE.Mesh(new THREE.CylinderGeometry(15, 15, 0.5, 20), M(0xc4553a));
+    track.scale.x = 1.5; track.position.set(30, 0.25, 14); g.add(track);
+    const pitch = new THREE.Mesh(new THREE.CylinderGeometry(11, 11, 0.7, 20), M(0x6fae4e));
+    pitch.scale.x = 1.5; pitch.position.set(30, 0.4, 14); g.add(pitch);
+    // swimming pool + water tank
+    g.add(box(10, 0.8, 5, 0x4fc3f7, -30, 0.2, 30));
+    g.add(cyl(0.9, 0.9, 13, 0xcfd8dc, 42, 0, -14, 6), cyl(3.4, 3.4, 3, 0x90a4ae, 42, 13, -14, 10));
+    // campus gate onto NH-66
+    [-4, 4].forEach((x) => g.add(box(2, 6, 2, 0xd9c9a8, x, 0, 34)));
+    g.add(box(11, 1.6, 1.4, 0x1a4d8f, 0, 6, 34));
+    g.add(treeM(-14, 5, 1.1), treeM(14, 4), treeM(-40, -8), treeM(46, 2), treeM(12, 26, 1.2), treeM(-16, 30));
+    return g;
+  },
+  // Mangalore University, Konaje: hilltop campus with gateway arch, red-roofed
+  // admin block, library dome, department blocks and lawns
+  university() {
+    const g = new THREE.Group();
+    // grand admin block
+    g.add(box(28, 9, 13, 0xead9bd, 0, 0, -8));
+    const ar = cone(20, 6, 0x9c3a2a, 0, 9, -8, 4, Math.PI / 4); ar.scale.z = 0.55; g.add(ar);
+    for (let i = 0; i < 6; i++) g.add(box(1.1, 8.5, 1.1, 0xfff8e1, -12 + i * 4.8, 0, -1.2));
+    // library with dome
+    g.add(box(14, 8, 12, 0xf0e6d0, -26, 0, 6));
+    g.add(dome(4.6, 0x8d9ba8, -26, 8, 6));
+    // science & humanities blocks
+    [[24, 2], [26, 16], [4, 18]].forEach(([x, z]) => {
+      g.add(box(13, 7, 8, 0xe6d6ba, x, 0, z));
+      g.add(box(13.6, 0.9, 8.6, 0x9c3a2a, x, 7, z));
+    });
+    // entry gateway arch + drive
+    [-3.4, 3.4].forEach((x) => g.add(box(2.2, 7.5, 2.2, 0xc9b18c, x, 0, 30)));
+    g.add(box(9.6, 2.2, 2, 0x9c3a2a, 0, 7.5, 30));
+    g.add(box(5, 0.3, 26, 0x9aa0a8, 0, 0.15, 16));
+    // lawns, flag and the campus peacocks' trees
+    const lawn = new THREE.Mesh(new THREE.CylinderGeometry(8, 8, 0.6, 12), M(0x7cb342));
+    lawn.position.set(-8, 0.3, 18); g.add(lawn);
+    g.add(cyl(0.16, 0.2, 11, 0xeceff1, -8, 0.6, 18, 6));
+    g.add(box(3.4, 0.8, 0.12, 0xff9933, -6.3, 11.2, 18), box(3.4, 0.8, 0.12, 0xffffff, -6.3, 10.4, 18), box(3.4, 0.8, 0.12, 0x138808, -6.3, 9.6, 18));
+    g.add(treeM(14, -16, 1.2), treeM(-16, -18), treeM(-34, -4, 1.1), treeM(36, 10, 1.15), treeM(14, 26), treeM(-28, 22, 0.9));
+    return g;
+  },
+  // Sahyadri: full riverside campus — main + dept blocks, canteen, hostels, two grounds
+  sahyadri() {
+    const g = new THREE.Group();
+    // main academic block with sign
+    g.add(box(20, 14, 11, 0x9fc4de, -14, 0, -6));
+    for (let y = 3.4; y < 13; y += 3.4) g.add(box(20.5, 0.7, 11.5, 0xfafafa, -14, y, -6));
+    g.add(box(13, 2.4, 0.9, 0xef6c00, -14, 14.4, -0.2));
+    // department blocks
+    [[8, -10, 11], [24, -6, 9]].forEach(([x, z, h]) => {
+      g.add(box(14, h, 9, 0xaecfe4, x, 0, z));
+      for (let y = 3.2; y < h - 0.5; y += 3.2) g.add(box(14.5, 0.6, 9.5, 0xffffff, x, y, z));
+    });
+    g.add(box(6, 7, 7, 0xffffff, -2, 0, -7));                          // atrium link
+    // canteen with awning and umbrella tables
+    g.add(box(9, 4, 7, 0xfff3e0, 4, 0, 8));
+    const awn = box(9.8, 0.5, 4, 0xef6c00, 4, 4.1, 11); awn.rotation.x = 0.22; g.add(awn);
+    [[0, 14], [7, 15], [3.5, 18]].forEach(([x, z]) => {
+      g.add(cyl(0.14, 0.14, 2.6, 0x8d6e63, x, 0.4, z, 5));
+      g.add(cone(1.5, 0.9, 0xef5350, x, 3, z, 8));
+    });
+    // hostels
+    [[-28, 10], [-28, 20]].forEach(([x, z]) => g.add(box(9, 10, 7, 0xf0cfa0, x, 0, z)));
+    // ground 1: cricket oval, ground 2: football pitch with goalposts
+    const oval = new THREE.Mesh(new THREE.CylinderGeometry(12, 12, 0.6, 18), M(0x6fae4e));
+    oval.scale.x = 1.35; oval.position.set(24, 0.3, 16); g.add(oval);
+    g.add(box(5, 0.7, 1.6, 0xd8c9a0, 24, 0.35, 16));
+    g.add(box(22, 0.6, 14, 0x7cb342, -6, 0.3, 28));
+    [[-16, 28], [4, 28]].forEach(([x, z]) => {
+      g.add(box(0.3, 2.4, 0.3, 0xffffff, x, 0.6, z - 3), box(0.3, 2.4, 0.3, 0xffffff, x, 0.6, z + 3), box(0.3, 0.3, 6.4, 0xffffff, x, 3, z));
+    });
+    // gate + buses
+    [-2, 4].forEach((x) => g.add(box(1.6, 5, 1.6, 0xcfd8dc, x, 0, 36)));
+    g.add(box(7.5, 1.4, 1.2, 0xef6c00, 1, 5, 36));
+    [[-16, 35], [-11, 35]].forEach(([x, z]) => g.add(box(4, 1.8, 1.8, 0xffca28, x, 0.4, z)));
+    g.add(treeM(32, 2, 1.1), treeM(-34, -2, 0.9), treeM(14, 34), treeM(-22, 34, 0.9));
+    return g;
+  },
+  // Karuna Pride: blue-glass slab with the Niveus & Novigo sign boards
+  itpark() {
+    const g = new THREE.Group();
+    g.add(box(26, 26, 12, 0x7fb2d6));
+    for (let y = 3.6; y < 25; y += 3.6) g.add(box(26.5, 0.8, 12.5, 0xeceff1, 0, y, 0));
+    g.add(box(27, 2.4, 13, 0x37474f, 0, 26, 0));
+    g.add(box(9, 2, 0.7, 0x0d47a1, -7, 27.5, 6.2));                     // Niveus board
+    g.add(box(9, 2, 0.7, 0x00897b, 7, 27.5, 6.2));                      // Novigo board
+    g.add(box(16, 4, 8, 0xcfd8dc, 0, 0, 10));
+    g.add(treeM(-18, 8, 0.8), treeM(18, 8, 0.8));
+    return g;
+  },
+  // bus stand: platform canopies on pillars, terminal, buses parked at angles
+  busstand() {
+    const g = new THREE.Group();
+    g.add(box(52, 0.5, 34, 0x8f959d, 0, 0, 0));                        // apron
+    // two long platform canopies
+    [-6, 8].forEach((z) => {
+      for (let x = -18; x <= 18; x += 9) g.add(cyl(0.5, 0.5, 4.5, 0x90a4ae, x, 0.4, z, 6));
+      const roof = box(44, 0.8, 6.5, 0xc62828, 0, 4.9, z);
+      g.add(roof);
+    });
+    // terminal building with sign
+    g.add(box(18, 6, 7, 0xfff3e0, 0, 0, -13));
+    g.add(box(19, 1, 8, 0x9c3a2a, 0, 6, -13));
+    g.add(box(10, 1.8, 0.8, 0x1a4d8f, 0, 7.2, -9.4));
+    // parked buses at angles
+    const cols = [[0xc62828, 0xffeb3b], [0x2e7d32, 0xffca28], [0x1565c0, 0xffffff], [0xef6c00, 0xffffff]];
+    cols.forEach(([c1, c2], i) => {
+      const b = new THREE.Group();
+      b.add(box(10, 3.6, 2.5, c1), box(10.2, 1, 2.55, c2, 0, 1.1, 0), box(9.4, 1.1, 2.6, 0x263238, 0, 2.3, 0));
+      b.position.set(-16 + i * 10.5, 0.3, 1);
+      b.rotation.y = 0.5;
+      g.add(b);
+    });
+    // waiting crowd dots
+    for (let i = 0; i < 8; i++) g.add(cyl(0.35, 0.35, 1.6, [0xef5350, 0x5c6bc0, 0x26a69a, 0xffb300][i % 4], -14 + i * 4, 0.4, 12, 5));
+    return g;
+  },
+  hospital() {
+    const g = new THREE.Group();
+    g.add(box(26, 16, 14, 0xfbfbf8));
+    for (let y = 4; y < 15; y += 4) g.add(box(26.5, 0.7, 14.5, 0xc5d4de, 0, y, 0));
+    g.add(box(5, 5, 0.8, 0xffffff, 0, 17, 5));                           // red-cross panel
+    g.add(box(1.2, 3.6, 0.9, 0xd32f2f, 0, 17.7, 5.1), box(3.6, 1.2, 0.9, 0xd32f2f, 0, 18.9, 5.1));
+    g.add(box(12, 3.5, 6, 0xe3ecf2, 0, 0, 10));                          // emergency canopy
+    [-4.5, 4.5].forEach((x) => g.add(cyl(0.5, 0.5, 3.2, 0xffffff, x, 0, 12.6, 6)));
+    const amb = new THREE.Group();                                        // ambulance
+    amb.add(box(5, 2.6, 2.2, 0xffffff), box(1.6, 2, 2.1, 0xffffff, 3, 0, 0));
+    amb.add(box(5.2, 0.7, 2.3, 0xd32f2f, 0, 1.2, 0));
+    amb.position.set(11, 0.4, 12); amb.rotation.y = 0.4;
+    g.add(amb);
+    return g;
+  },
+  // Hampankatta clock tower roundabout
+  clocktower() {
+    const g = new THREE.Group();
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(13, 13, 0.4, 18), M(0x8f959d));
+    ring.position.y = 0.2; g.add(ring);
+    const isle = new THREE.Mesh(new THREE.CylinderGeometry(7, 7, 1, 16), M(0x7cb342));
+    isle.position.y = 0.5; g.add(isle);
+    g.add(box(3.4, 14, 3.4, 0xf2e3c4, 0, 1, 0));
+    [[0, 1.75, 0], [0, -1.75, Math.PI], [1.75, 0, Math.PI / 2], [-1.75, 0, -Math.PI / 2]].forEach(([dx, dz, ry]) => {
+      const c = new THREE.Mesh(new THREE.CircleGeometry(1.1, 12), M(0xfffde7));
+      c.position.set(dx, 12.4, dz);
+      c.rotation.y = ry;
+      g.add(c);
+    });
+    g.add(cone(2.8, 2.4, 0x9c3a2a, 0, 15, 0, 4, Math.PI / 4));
+    g.add(kalasha(0, 17.6, 0, 0.5));
+    return g;
+  },
+  // Pumpwell: flyover deck sweeping over the roundabout on pillars
+  flyover() {
+    const g = new THREE.Group();
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(16, 16, 0.4, 18), M(0x8f959d));
+    ring.position.y = 0.2; g.add(ring);
+    const isle = new THREE.Mesh(new THREE.CylinderGeometry(8, 8, 1, 16), M(0x7cb342));
+    isle.position.y = 0.5; g.add(isle);
+    const segs = 11, len = 88;
+    for (let i = 0; i < segs; i++) {
+      const t = i / (segs - 1) - 0.5;
+      const x = t * len;
+      const y = 9 + Math.cos(t * Math.PI) * 4.5;
+      const d = box(len / segs + 1.2, 1.6, 9, 0x7d848c, x, y, 0);
+      d.rotation.z = Math.sin(t * Math.PI) * -0.16;
+      g.add(d);
+      g.add(box(len / segs + 1, 1, 0.7, 0xb8bec5, x, y + 1.6, 4.2), box(len / segs + 1, 1, 0.7, 0xb8bec5, x, y + 1.6, -4.2));
+      if (i % 2 === 0 && Math.abs(t) > 0.12) g.add(box(2.6, y, 2.6, 0x9aa0a8, x, 0, 0));
+    }
+    g.add(treeM(0, 0, 0.55));
+    return g;
+  },
+  skyscraper() {
+    const g = new THREE.Group();
+    g.add(box(15, 52, 15, 0xf0e6d4));
+    for (let y = 4; y < 50; y += 4) g.add(box(15.5, 0.9, 15.5, 0x8d7a5f, 0, y, 0));
+    g.add(box(10, 4, 10, 0xe3d5bd, 0, 52, 0));
+    g.add(box(16, 5, 12, 0xd9cbb2, 0, 0, 12));
+    return g;
+  },
+  // St Aloysius: the red-brick 1880 block with white arcaded verandas
+  aloysius() {
+    const g = new THREE.Group();
+    g.add(box(42, 13, 14, 0x9c4a3a));
+    [1.8, 6.2, 10.6].forEach((y) => g.add(box(42.6, 1.1, 14.6, 0xf5efe2, 0, y, 0)));
+    for (let i = 0; i < 9; i++) g.add(box(0.9, 12, 0.9, 0xf5efe2, -18 + i * 4.5, 0, 7.2));
+    g.add(box(43, 1.6, 15, 0x7c3a2c, 0, 13, 0));
+    g.add(box(8, 20, 8, 0x9c4a3a, 0, 0, 0));
+    g.add(box(8.6, 1, 8.6, 0xf5efe2, 0, 16, 0));
+    g.add(cone(6, 3.4, 0x7c3a2c, 0, 20, 0, 4, Math.PI / 4));
+    g.add(box(0.5, 3, 0.5, 0xffd54f, 0, 23.4, 0), box(2, 0.5, 0.5, 0xffd54f, 0, 25, 0));
+    g.add(treeM(-26, 6, 0.9), treeM(26, 6, 0.9));
+    return g;
+  },
+  // Nehru Maidan: open city ground with fence, pavilion and cricket pitch
+  maidan() {
+    const g = new THREE.Group();
+    g.add(box(46, 0.6, 32, 0x7cb342, 0, 0, 0));
+    g.add(box(10, 0.7, 2.6, 0xd8c9a0, 0, 0.35, 0));                    // pitch
+    // white rail fence
+    [[0, -16.4, 47, 0.5], [0, 16.4, 47, 0.5], [-23.2, 0, 0.5, 33], [23.2, 0, 0.5, 33]].forEach(([x, z, w, d]) =>
+      g.add(box(w, 1.1, d, 0xfafafa, x, 0.6, z)));
+    g.add(box(9, 3.5, 4, 0xfff3e0, 0, 0.6, -14));                      // pavilion
+    const pr = cone(6.4, 2.6, 0x9c3a2a, 0, 4.1, -14, 4, Math.PI / 4); pr.scale.z = 0.6; g.add(pr);
+    g.add(treeM(-20, -13, 0.8), treeM(20, -13, 0.85), treeM(-20, 13, 0.8), treeM(20, 13, 0.9));
+    return g;
+  },
+  // Mangala Stadium: track, pitch, curved stands and floodlights
+  stadium() {
+    const g = new THREE.Group();
+    const track = new THREE.Mesh(new THREE.CylinderGeometry(17, 17, 0.6, 22), M(0xc4553a));
+    track.scale.x = 1.4; track.position.y = 0.3; g.add(track);
+    const pitch = new THREE.Mesh(new THREE.CylinderGeometry(12.5, 12.5, 0.8, 22), M(0x6fae4e));
+    pitch.scale.x = 1.4; pitch.position.y = 0.4; g.add(pitch);
+    // ring of stands
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2;
+      if (Math.abs(Math.sin(a)) < 0.28) continue;                      // open ends
+      const st = box(7.5, 4.5, 3, 0xd7ccc8, Math.cos(a) * 23.5, 0, Math.sin(a) * 18.5);
+      st.rotation.y = -a + Math.PI / 2;
+      g.add(st);
+      const seat = box(7.5, 1, 2.4, 0x1a6bb5, Math.cos(a) * 23.5, 4.5, Math.sin(a) * 18.5);
+      seat.rotation.y = -a + Math.PI / 2;
+      g.add(seat);
+    }
+    // floodlight towers
+    [[-26, -14], [26, -14], [-26, 14], [26, 14]].forEach(([x, z]) => {
+      g.add(cyl(0.5, 0.7, 16, 0x90a4ae, x, 0, z, 6));
+      g.add(box(4, 2.6, 0.8, 0xf5f5f5, x, 16, z));
+    });
+    return g;
+  },
+  college() {
+    const g = new THREE.Group();
+    g.add(box(44, 12, 16, 0xbf6b4a), box(45, 1.5, 17, 0xfff3e0, 0, 12), box(10, 24, 10, 0xa8543a));
+    g.add(cone(7.4, 5, 0x6d4c41, 0, 25.5, 0, 4, Math.PI / 4));
+    const clock = new THREE.Mesh(new THREE.CircleGeometry(2.4, 14), M(0xfffde7));
+    clock.position.set(0, 20, 5.2); g.add(clock);
+    g.add(treeM(-28, 4), treeM(28, -3), treeM(-24, -10));
+    return g;
+  },
+  icecream() {
+    const g = new THREE.Group();
+    const cn = cone(5, 14, 0xd7a86e, 0, 0, 0, 10); cn.rotation.x = Math.PI; cn.position.y = 7; g.add(cn);
+    g.add(sph(5.4, 0xf48fb1, 0, 16, 0), sph(4.4, 0xfff59d, 0, 22.5, 0), sph(3.4, 0x8d6e63, 0, 28, 0), sph(1, 0xd32f2f, 0, 31.5, 0));
+    g.add(box(14, 5, 10, 0x00897b, 0, 0, -12));
+    return g;
+  },
+  cafe() {
+    const g = new THREE.Group();
+    g.add(box(16, 7, 12, 0xfff8e1));
+    const awn = box(17, 0.6, 5, 0xc62828, 0, 6.2, 8); awn.rotation.x = 0.25; g.add(awn);
+    g.add(cyl(4, 3.4, 6, 0xffffff, 0, 8, 0, 12), cyl(4.4, 4.4, 1, 0xef6c00, 0, 7.4, 0, 12));
+    g.add(sph(1.6, 0x8d6e63, -3, 15.5, 0), sph(1.6, 0x8d6e63, 0, 16.3, 1.5), sph(1.6, 0x8d6e63, 2.8, 15.5, -0.6));
+    return g;
+  },
+  fish() {
+    const g = new THREE.Group();
+    g.add(box(16, 7, 12, 0xffe0b2));
+    const body = sph(5, 0xff7043, 0, 12, 0); body.scale.set(1.6, 0.9, 0.7); g.add(body);
+    const tail = cone(3, 5, 0xff5722, -9.5, 10.5, 0, 4, Math.PI / 4); tail.rotation.z = Math.PI / 2; g.add(tail);
+    g.add(sph(0.7, 0x263238, 5.5, 13, 2.6));
+    return g;
+  },
+  waterpark() {
+    const g = new THREE.Group();
+    const pool = new THREE.Mesh(new THREE.CylinderGeometry(14, 14, 1.2, 16), M(0x4fc3f7)); pool.position.y = 0.6; g.add(pool);
+    g.add(cyl(1, 1, 14, 0xffee58, 8, 0, -6, 6));
+    const slide = box(3, 1, 22, 0xef5350, 1, 6, 3); slide.rotation.x = -0.55; g.add(slide);
+    g.add(palm(-12, 8), palm(-10, -8));
+    return g;
+  },
+  airport() {
+    const g = new THREE.Group();
+    g.add(box(60, 8, 16, 0xeceff1, 0, 0, -10), box(62, 1.2, 18, 0x1565c0, 0, 8, -10));
+    g.add(cyl(2, 2.6, 18, 0xcfd8dc, -26, 0, 8, 8), cyl(5, 4, 4, 0x81d4fa, -26, 18, 8, 8));
+    g.add(box(90, 0.6, 12, 0x37474f, 6, 0, 14));
+    return g;
+  },
+  train() {
+    const g = new THREE.Group();
+    g.add(box(40, 6, 8, 0xffe082, 0, 0, -8), box(42, 1, 10, 0xbf360c, 0, 6, -8), box(44, 1, 6, 0x9e9e9e));
+    [0x1565c0, 0x1e88e5, 0x1e88e5].forEach((c, i) => g.add(box(12, 4, 3.4, c, -14 + i * 13, 1, 5)));
+    for (let i = 0; i < 9; i++) g.add(box(1.6, 1.4, 0.3, 0xbbdefb, -18 + i * 4.4, 3, 6.8));
+    return g;
+  },
+  watchtower() {
+    const g = new THREE.Group();
+    g.add(cyl(7, 8, 9, 0x8d8d8d, 0, 0, 0, 10));
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      g.add(box(1.8, 1.8, 1.2, 0x757575, Math.cos(a) * 6.6, 9, Math.sin(a) * 6.6));
+    }
+    g.add(box(3, 5, 2, 0x616161, 0, 0, 7.4), palm(12, 3, 8));
+    return g;
+  },
+  pilikula() {
+    const g = new THREE.Group();
+    g.add(dome(8, 0xfafafa, -14, 3, 0), cyl(8, 8, 3, 0xe0e0e0, -14, 0, 0, 14));
+    g.add(treeM(-2, 10, 1.2), treeM(6, -8), treeM(-6, -12), treeM(14, 8, 1.3), treeM(20, -2));
+    const fw = new THREE.Group();
+    const wheel = new THREE.Group();
+    wheel.add(new THREE.Mesh(new THREE.TorusGeometry(9, 0.5, 6, 22), M(0xff7043)));
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const spoke = box(0.45, 18, 0.45, 0xffab91); spoke.rotation.z = a; wheel.add(spoke);
+      const cab = box(2, 2, 2, [0xffca28, 0x29b6f6, 0x66bb6a, 0xec407a][i % 4], Math.cos(a) * 9, Math.sin(a) * 9 - 1, 0);
+      cab.userData.cab = true; wheel.add(cab);
+    }
+    wheel.position.y = 11; wheel.userData.wheel = true; ANIMATED.push(wheel);
+    fw.add(wheel, box(1, 11, 1, 0x8d6e63, -3.5), box(1, 11, 1, 0x8d6e63, 3.5));
+    fw.position.set(10, 0, 6); fw.rotation.y = 0.6; g.add(fw);
+    return g;
+  },
+  park() {
+    const g = new THREE.Group();
+    const lawn = new THREE.Mesh(new THREE.CylinderGeometry(22, 22, 0.8, 16), M(0x7cb342)); lawn.position.y = 0.4; g.add(lawn);
+    g.add(treeM(-10, -6, 1.1), treeM(8, 5), treeM(-3, 12, 1.2), treeM(12, -9), treeM(0, -14));
+    g.add(cyl(3, 3.6, 1.4, 0x90a4ae, 0, 0.8, 0, 12), cone(0.9, 4.5, 0x81d4fa, 0, 2.2, 0, 8));
+    return g;
+  },
+  boats() {
+    const g = new THREE.Group();
+    [[0xe53935, -8, 0, 0.3], [0x1e88e5, 4, 6, -0.4], [0x43a047, 10, -4, 0.9]].forEach(([c, x, z, ry]) => {
+      const b = new THREE.Group();
+      b.add(box(14, 3, 4.5, c), cone(2.2, 3.5, c, 8, 0, 0, 4, Math.PI / 4), box(3.5, 3, 3.5, 0xfff3e0, -3, 3), cyl(0.25, 0.25, 7, 0x6d4c41, 2, 3, 0, 5));
+      b.position.set(x, 0, z); b.rotation.y = ry; g.add(b);
+    });
+    return g;
+  },
+  museum() {
+    const g = new THREE.Group();
+    g.add(box(26, 10, 16, 0xfff8e1));
+    for (let i = 0; i < 5; i++) g.add(cyl(0.9, 0.9, 9, 0xffffff, -10 + i * 5, 0, 8.6, 8));
+    const ped = cone(15, 5, 0xd7ccc8, 0, 10, 0, 4, Math.PI / 4); ped.scale.z = 0.62; g.add(ped);
+    return g;
+  },
+};
+
+const LM_SCALE = 5.5; // exaggerate landmarks like the reference map
+const modelEntries = [];
+LANDMARKS.forEach((l, i) => {
+  const b = BUILDERS[l.model];
+  if (!b) return;
+  const grp = b();
+  grp.scale.setScalar(LM_SCALE * (l.mScale || 1));
+  grp.position.set(l.x, l.y - 0.5, l.z);
+  grp.rotation.y = ((l.lng * 997) % 1.2) - 0.6;
+  grp.traverse((o) => { o.userData.lmIdx = i; });
+  scene.add(grp);
+  modelEntries.push({ group: grp, landmark: l, idx: i });
+});
+
+/* ---- animated ferry & plane ---- */
+const ferry = new THREE.Group();
+ferry.add(box(14, 3, 5, 0xff8f00), box(5, 3.5, 4, 0xfffde7, 0, 3, 0));
+ferry.scale.setScalar(4);
+scene.add(ferry);
+const FA = ll(74.8225, 12.8840), FB = ll(74.8135, 12.8852); // Sultan Battery ⇄ Tannirbhavi crossing
+
+const plane = new THREE.Group();
+{
+  const fus = cyl(1.6, 1.6, 18, 0xffffff, 0, 0, 0, 8);
+  fus.rotation.z = Math.PI / 2;
+  plane.add(fus, box(2.2, 0.5, 16, 0xe53935, 0, 0, 0), box(1.4, 4, 0.6, 0xe53935, -8, 1, 0));
+  plane.scale.setScalar(6);
+  scene.add(plane);
+}
+const AIRPORT = LANDMARKS.find((l) => l.model === "airport");
+
+/* ---- traffic paths ---- */
+function buildPath(ptsLL) {
+  const path = [];
+  const pts = ptsLL.map(([lng, lat]) => ll(lng, lat));
+  let acc = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const segLen = Math.hypot(b.x - a.x, b.z - a.z);
+    const n = Math.max(2, Math.ceil(segLen / 220));
+    for (let j = 0; j < n; j++) {
+      const x = a.x + ((b.x - a.x) * j) / n, z = a.z + ((b.z - a.z) * j) / n;
+      path.push({ x, z, y: Math.max(heightAt(x, z), 1.0) + 2.6, d: acc });
+      acc += segLen / n;
+    }
+  }
+  path.total = acc;
+  return path;
+}
+const NH_PATH = buildPath(NH66_PTS);
+// city bus route: State Bank → Bejai (KSRTC) → Kadri → airport road
+const CITY_PATH = buildPath([[74.8395, 12.8655], [74.8434, 12.8691], [74.8480, 12.8830], [74.8556, 12.8859], [74.868, 12.920], [74.8890, 12.9610]]);
+// dashed white centreline down NH-66
+{
+  const dashes = [];
+  for (let d = 0; d < NH_PATH.total; d += 520) dashes.push(d);
+  const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xf2f2ee }), dashes.length);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s3 = new THREE.Vector3(), p3 = new THREE.Vector3();
+  dashes.forEach((d, i) => {
+    let lo = 0, hi = NH_PATH.length - 1;
+    while (lo < hi - 1) { const m = (lo + hi) >> 1; NH_PATH[m].d <= d ? (lo = m) : (hi = m); }
+    const a = NH_PATH[lo], b = NH_PATH[Math.min(lo + 1, NH_PATH.length - 1)];
+    const dx = b.x - a.x, dz = b.z - a.z;
+    e.set(0, Math.atan2(dx, dz), 0); q.setFromEuler(e);
+    s3.set(6, 0.5, 44);
+    p3.set(a.x, a.y + 0.6, a.z);
+    m4.compose(p3, q, s3);
+    inst.setMatrixAt(i, m4);
+  });
+  scene.add(inst);
+}
+const CAR_COLS = [0xd32f2f, 0xfafafa, 0x1565c0, 0xf9a825, 0x37474f, 0x2e7d32, 0xef6c00, 0xfafafa];
+const cars = CAR_COLS.map((c, i) => {
+  const car = new THREE.Group();
+  const isBus = i % 4 === 3;
+  car.add(box(isBus ? 9 : 5, isBus ? 3.4 : 2.2, 2.4, c));
+  if (!isBus) car.add(box(2.6, 1.6, 2.2, c, -0.3, 2.2, 0));
+  car.scale.setScalar(3.4);
+  scene.add(car);
+  return { mesh: car, path: NH_PATH, off: (i / CAR_COLS.length), dir: i % 2 ? 1 : -1, lane: i % 2 ? 22 : -22, speed: isBus ? 220 : 300 + (i % 3) * 60 };
+});
+// the famous Kudla private buses, going full rampage
+function makeBusMesh(c1, c2) {
+  const bus = new THREE.Group();
+  bus.add(box(10, 3.8, 2.5, c1));
+  bus.add(box(10.2, 1.1, 2.55, c2, 0, 1.2, 0));                        // livery stripe
+  bus.add(box(9.4, 1.2, 2.6, 0x263238, 0, 2.5, 0));                     // window band
+  bus.add(box(0.4, 2.6, 2.3, 0x263238, 5, 0.5, 0));                     // windshield
+  bus.scale.setScalar(3.6);
+  scene.add(bus);
+  return bus;
+}
+const BUS_LIVERIES = [[0xc62828, 0xffeb3b], [0xf9a825, 0x2e7d32], [0x1565c0, 0xffffff], [0xef6c00, 0xffffff], [0x6a1b9a, 0xffca28], [0x00897b, 0xfff59d]];
+BUS_LIVERIES.forEach(([c1, c2], i) => {
+  cars.push({ mesh: makeBusMesh(c1, c2), path: NH_PATH, off: i / BUS_LIVERIES.length + 0.07, dir: i % 2 ? 1 : -1, lane: i % 2 ? 32 : -32, speed: 520 + (i % 3) * 90 });
+});
+[[0xc62828, 0xffffff], [0x2e7d32, 0xffeb3b], [0x1565c0, 0xffca28], [0xef6c00, 0x1a237e]].forEach(([c1, c2], i) => {
+  cars.push({ mesh: makeBusMesh(c1, c2), path: CITY_PATH, off: i / 4, dir: i % 2 ? 1 : -1, lane: i % 2 ? 16 : -16, speed: 460 + (i % 2) * 120 });
+});
+function placeOnPath(path, frac, lane) {
+  const d = frac * path.total;
+  let lo = 0, hi = path.length - 1;
+  while (lo < hi - 1) { const m = (lo + hi) >> 1; path[m].d <= d ? (lo = m) : (hi = m); }
+  const a = path[lo], b = path[Math.min(lo + 1, path.length - 1)];
+  const t = Math.min(1, (d - a.d) / Math.max(1, (b.d - a.d)));
+  const dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz) || 1;
+  return {
+    x: a.x + dx * t - (dz / len) * lane, z: a.z + dz * t + (dx / len) * lane,
+    y: a.y + (b.y - a.y) * t, rot: Math.atan2(dx, dz),
+  };
+}
+
+/* ---- ships & fishing boats at sea ---- */
+const ships = [];
+[[-8600, -9000, 0x37474f, 14], [-9600, 2000, 0x5d4037, 11]].forEach(([x, z, c, sc]) => {
+  const s = new THREE.Group();
+  s.add(box(30, 4, 8, c), box(5, 6, 7, 0xeceff1, -9, 4, 0));
+  for (let i = 0; i < 3; i++) s.add(box(5, 2.2, 6, [0xe53935, 0x43a047, 0xfb8c00][i], 2 + i * 5.6, 4, 0));
+  s.scale.setScalar(sc / 3);
+  s.position.set(x, 0.5, z);
+  scene.add(s);
+  ships.push(s);
+});
+// anchored fishing boats in the estuary
+[[74.826, 12.856, 0.4], [74.8245, 12.8665, -0.8], [74.827, 12.8505, 1.7]].forEach(([lng, lat, ry]) => {
+  const p = ll(lng, lat);
+  const b = new THREE.Group();
+  b.add(box(10, 2.2, 3.4, 0x1e88e5), cone(1.6, 2.6, 0x1e88e5, 5.8, 0, 0, 4, Math.PI / 4), box(2.6, 2.2, 2.6, 0xfff3e0, -2, 2.2, 0));
+  b.scale.setScalar(2.6);
+  b.position.set(p.x, 0.6, p.z);
+  b.rotation.y = ry;
+  scene.add(b);
+});
+
+/* ---- Panambur watersports: speedboat + parasail, jetskis, banana boat ---- */
+const WS_C = ll(74.8005, 12.9375);
+const speedboat = new THREE.Group();
+speedboat.add(box(11, 2.2, 4, 0xfafafa), cone(2, 3.5, 0xfafafa, 6.6, 0, 0, 4, Math.PI / 4), box(3, 2, 3.4, 0x1a6bb5, -2, 2.2, 0));
+speedboat.scale.setScalar(3.2);
+scene.add(speedboat);
+const chute = new THREE.Group();
+{
+  const canopy = new THREE.Mesh(new THREE.SphereGeometry(6, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), M(0xef5350));
+  canopy.scale.y = 0.6; chute.add(canopy);
+  chute.add(box(0.7, 2.2, 0.7, 0x37474f, 0, -2.4, 0));   // the tiny brave tourist
+  chute.scale.setScalar(3.2);
+  scene.add(chute);
+}
+const jetskis = [0xffca28, 0x26c6da].map((c, i) => {
+  const j = new THREE.Group();
+  j.add(box(5, 1.6, 2, c), box(1.4, 1.8, 1.4, 0x37474f, -0.6, 1.6, 0));
+  j.scale.setScalar(2.6);
+  scene.add(j);
+  return j;
+});
+const banana = new THREE.Group();
+{
+  const b = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 14, 8), M(0xffee58));
+  b.rotation.z = Math.PI / 2; b.scale.y = 0.9; banana.add(b);
+  banana.scale.setScalar(2.6);
+  banana.position.set(WS_C.x + 180, 1.2, WS_C.z + 260);
+  banana.rotation.y = 0.7;
+  scene.add(banana);
+}
+
+/* ==================== LABELS / PICKING / UI ==================== */
+const labelsEl = document.getElementById("labels");
+const labelDivs = LANDMARKS.map((l, i) => {
+  const d = document.createElement("div");
+  d.className = "pill";
+  d.innerHTML = `<span class="ic">${CATEGORIES[l.cat].icon}</span>${l.name}`;
+  d.style.borderLeft = `4px solid ${CATEGORIES[l.cat].color}`;
+  d.onclick = () => selectLandmark(i, true);
+  labelsEl.appendChild(d);
+  return d;
+});
+
+// neighbourhood / area names, rendered as subtle ground captions
+const AREAS = [
+  ["HAMPANKATTA", 74.8434, 12.8691], ["BEJAI", 74.8480, 12.8830], ["KADRI", 74.8530, 12.8840],
+  ["KODIALBAIL", 74.8400, 12.8770], ["BUNDER", 74.8360, 12.8620], ["LALBAGH", 74.8380, 12.8860],
+  ["MANNAGUDDA", 74.8370, 12.8820], ["KOTTARA", 74.8380, 12.8985], ["SURATHKAL", 74.7950, 13.0070],
+  ["ULLAL", 74.8450, 12.8070], ["BENGRE", 74.8200, 12.8580], ["KULUR", 74.8220, 12.9060],
+  ["PANAMBUR", 74.8080, 12.9370], ["BAIKAMPADY", 74.8140, 12.9450], ["BAJPE", 74.8840, 12.9750],
+  ["KONAJE", 74.9283, 12.8202], ["PUMPWELL", 74.8585, 12.8560], ["KANKANADY", 74.8600, 12.8646],
+  ["ATTAVAR", 74.8420, 12.8620], ["DERALAKATTE", 74.8982, 12.8090], ["ARABIAN SEA", 74.7500, 12.9200],
+  ["MUKKA", 74.7930, 13.0300], ["UCHILA", 74.7990, 13.0480], ["MULKI", 74.8020, 13.0950],
+  ["PADUBIDRI", 74.7800, 13.1450], ["KAUP", 74.7620, 13.2230],
+  ["NH-66", 74.8080, 12.9650], ["NH-66", 74.8440, 12.8200], ["NH-66", 74.7900, 13.1200],
+  ["NH-75 · BENGALURU", 74.9350, 12.8545], ["NH-169 · MOODBIDRI", 74.9300, 12.9075],
+  ["NETRAVATI RIVER", 74.8950, 12.8630], ["GURUPURA RIVER", 74.8800, 12.9180], ["NANDINI RIVER", 74.8500, 13.0250],
+].map(([name, lng, lat]) => { const p = ll(lng, lat); return { name, x: p.x, z: p.z, y: Math.max(rawHeight(p.x, p.z), 0) + 20 }; });
+const areaDivs = AREAS.map((a) => {
+  const d = document.createElement("div");
+  d.className = "area";
+  d.textContent = a.name;
+  labelsEl.appendChild(d);
+  return d;
+});
+
+const v3 = new THREE.Vector3();
+function updateLabels() {
+  const camD = camera.position.distanceTo(controls.target);
+  AREAS.forEach((a, i) => {
+    const d = areaDivs[i];
+    if (camD > 30000) { d.style.display = "none"; return; }
+    v3.set(a.x, a.y, a.z).project(camera);
+    if (v3.z > 1 || Math.abs(v3.x) > 1.05 || Math.abs(v3.y) > 1.05) { d.style.display = "none"; return; }
+    d.style.display = "block";
+    d.style.left = ((v3.x + 1) / 2) * innerWidth + "px";
+    d.style.top = ((-v3.y + 1) / 2) * innerHeight + "px";
+    d.style.opacity = Math.min(1, Math.max(0.35, 1.4 - camD / 25000));
+  });
+  updatePills();
+}
+function updatePills() {
+  const w = innerWidth, h = innerHeight;
+  // project all visible labels, then greedily drop overlapping ones (closest first,
+  // selected landmark always wins) so the screen never gets cramped
+  const cand = [];
+  LANDMARKS.forEach((l, i) => {
+    if (!visibleSet.has(i)) { labelDivs[i].style.display = "none"; return; }
+    v3.set(l.x, l.y + 90, l.z).project(camera);
+    if (v3.z > 1 || v3.x < -1.1 || v3.x > 1.1 || v3.y < -1.1 || v3.y > 1.1) { labelDivs[i].style.display = "none"; return; }
+    cand.push({ i, sx: ((v3.x + 1) / 2) * w, sy: ((-v3.y + 1) / 2) * h, z: v3.z, pw: l.name.length * 6.6 + 34 });
+  });
+  cand.sort((a, b) => (a.i === selectedIdx ? -1 : b.i === selectedIdx ? 1 : a.z - b.z));
+  const placed = [];
+  for (const c of cand) {
+    const x0 = c.sx - c.pw / 2, x1 = c.sx + c.pw / 2, y0 = c.sy - 36, y1 = c.sy;
+    const clash = placed.some((p) => x0 < p.x1 + 4 && x1 > p.x0 - 4 && y0 < p.y1 + 4 && y1 > p.y0 - 4);
+    const d = labelDivs[c.i];
+    if (clash) { d.style.display = "none"; continue; }
+    placed.push({ x0, x1, y0, y1 });
+    d.style.display = "flex";
+    d.style.left = c.sx + "px";
+    d.style.top = c.sy + "px";
+    d.style.zIndex = Math.round((1 - c.z) * 10000);
+  }
+}
+
+/* ---- selection card ---- */
+const card = document.getElementById("card");
+let selectedIdx = null;
+function selectLandmark(i, fly) {
+  selectedIdx = i;
+  const l = LANDMARKS[i], c = CATEGORIES[l.cat];
+  card.querySelector(".c-title").textContent = l.name;
+  const cc = card.querySelector(".c-cat"); cc.textContent = c.label; cc.style.color = c.color;
+  card.querySelector(".c-desc").textContent = l.desc;
+  const cf = card.querySelector(".c-fact"); cf.innerHTML = "💡 " + l.fact; cf.style.display = l.fact ? "" : "none";
+  updateCardBtn();
+  card.style.display = "block";
+  if (fly) flyToLandmark(i);
+}
+function updateCardBtn() {
+  const btn = card.querySelector(".c-add");
+  const inTrip = trip.includes(selectedIdx);
+  btn.textContent = inTrip ? "✓ In your trip" : "＋ Add to trip";
+  btn.disabled = inTrip;
+  btn.onclick = () => { if (!trip.includes(selectedIdx)) { trip.push(selectedIdx); renderTrip(); updateCardBtn(); } };
+}
+window.closeCard = () => { card.style.display = "none"; selectedIdx = null; };
+
+/* ---- camera fly ---- */
+let flight = null;
+function flyToLandmark(i) {
+  const l = LANDMARKS[i];
+  const tgt = new THREE.Vector3(l.x, l.y + 30, l.z);
+  const dir = camera.position.clone().sub(controls.target).normalize();
+  if (dir.y < 0.25) dir.y = 0.25;
+  dir.normalize();
+  const pos = tgt.clone().add(dir.multiplyScalar(1400)).add(new THREE.Vector3(0, 420, 0));
+  flight = { t: 0, p0: camera.position.clone(), p1: pos, t0: controls.target.clone(), t1: tgt };
+}
+function flyHome() {
+  flight = { t: 0, p0: camera.position.clone(), p1: HOME_POS.clone(), t0: controls.target.clone(), t1: HOME_TGT.clone() };
+}
+canvas.addEventListener("pointerdown", () => { flight = null; stopTour(); });
+
+/* ---- raycast click on models ---- */
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let downAt = null;
+canvas.addEventListener("pointerdown", (e) => { downAt = [e.clientX, e.clientY]; });
+canvas.addEventListener("pointerup", (e) => {
+  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;
+  mouse.x = (e.clientX / innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(modelEntries.map((m) => m.group), true);
+  if (hits.length && hits[0].object.userData.lmIdx !== undefined) selectLandmark(hits[0].object.userData.lmIdx, false);
+});
+
+/* ---- sidebar: filters, search, list ---- */
+const trip = [];
+const activeCats = new Set(Object.keys(CATEGORIES));
+let searchTerm = "";
+const visibleSet = new Set(LANDMARKS.map((_, i) => i));
+
+const filtersEl = document.getElementById("filters");
+Object.entries(CATEGORIES).forEach(([key, c]) => {
+  const chip = document.createElement("button");
+  chip.className = "chip active";
+  chip.textContent = c.label;
+  chip.style.background = c.color;
+  chip.onclick = () => {
+    if (activeCats.has(key)) { activeCats.delete(key); chip.classList.remove("active"); chip.style.background = "transparent"; }
+    else { activeCats.add(key); chip.classList.add("active"); chip.style.background = c.color; }
+    refresh();
+  };
+  filtersEl.appendChild(chip);
+});
+
+const listEl = document.getElementById("list");
+function refresh() {
+  listEl.innerHTML = "";
+  visibleSet.clear();
+  LANDMARKS.forEach((l, i) => {
+    const vis = activeCats.has(l.cat) && l.name.toLowerCase().includes(searchTerm);
+    const entry = modelEntries.find((m) => m.idx === i);
+    if (entry) entry.group.visible = vis;
+    if (!vis) return;
+    visibleSet.add(i);
+    const item = document.createElement("div");
+    item.className = "item";
+    const inTrip = trip.includes(i);
+    item.innerHTML = `<span class="dot" style="background:${CATEGORIES[l.cat].color}"></span>
+      <span style="flex:1"><div class="name">${l.name}</div><div class="cat">${CATEGORIES[l.cat].label}</div></span>
+      <button class="add${inTrip ? " in" : ""}" title="Add to trip">${inTrip ? "✓" : "＋"}</button>`;
+    item.onclick = () => selectLandmark(i, true);
+    const addBtn = item.querySelector(".add");
+    addBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (!trip.includes(i)) { trip.push(i); renderTrip(); if (selectedIdx === i) updateCardBtn(); }
+      addBtn.textContent = "✓";
+      addBtn.classList.add("in");
+    };
+    listEl.appendChild(item);
+  });
+}
+refresh();
+document.getElementById("search").addEventListener("input", (e) => { searchTerm = e.target.value.toLowerCase(); refresh(); });
+
+/* ---- trip planner ---- */
+function renderTrip() {
+  const listT = document.getElementById("tripList");
+  const btns = document.getElementById("tripBtns");
+  document.getElementById("tripCount").textContent = trip.length ? `(${trip.length})` : "";
+  if (!trip.length) {
+    listT.innerHTML = '<div class="empty">Click "Add to trip" on any landmark to plan your Mangalore itinerary.</div>';
+    btns.style.display = "none";
+    return;
+  }
+  btns.style.display = "flex";
+  listT.innerHTML = "";
+  trip.forEach((idx, order) => {
+    const l = LANDMARKS[idx];
+    const row = document.createElement("div");
+    row.className = "trip-item";
+    row.innerHTML = `<span style="width:8px;height:8px;border-radius:50%;background:${CATEGORIES[l.cat].color}"></span>
+      <span class="n">${order + 1}. ${l.name}</span><span class="x">✕</span>`;
+    row.querySelector(".n").onclick = () => selectLandmark(idx, true);
+    row.querySelector(".x").onclick = () => { trip.splice(order, 1); renderTrip(); if (selectedIdx !== null) updateCardBtn(); };
+    listT.appendChild(row);
+  });
+  refresh(); // keep the ＋/✓ buttons in the landmark list in sync
+}
+document.getElementById("btnTripClear").onclick = () => { trip.length = 0; renderTrip(); if (selectedIdx !== null) updateCardBtn(); };
+
+// trip tour: manual, story-style — you press Next to move between your stops
+let tripActive = false, tripPos = 0;
+const tripTourBtn = document.getElementById("btnTripTour");
+const tripBar = document.getElementById("tripbar");
+function tripGo(i) {
+  tripPos = Math.max(0, Math.min(trip.length - 1, i));
+  selectLandmark(trip[tripPos], true);
+  tripBar.querySelector(".t-label").textContent = `Stop ${tripPos + 1} of ${trip.length} · ${LANDMARKS[trip[tripPos]].name}`;
+  tripBar.querySelector(".t-prev").style.visibility = tripPos ? "visible" : "hidden";
+  tripBar.querySelector(".t-next").textContent = tripPos === trip.length - 1 ? "Finish ✓" : "Next ▶";
+}
+function stopTripTour() {
+  if (!tripActive) return;
+  tripActive = false;
+  tripBar.classList.remove("on");
+  tripTourBtn.textContent = "▶ Tour my trip";
+}
+tripTourBtn.onclick = () => {
+  if (tripActive) return stopTripTour();
+  if (!trip.length) return;
+  tripActive = true;
+  tripTourBtn.textContent = "■ End tour";
+  tripBar.classList.add("on");
+  tripGo(0);
+};
+tripBar.querySelector(".t-next").onclick = () => (tripPos >= trip.length - 1 ? stopTripTour() : tripGo(tripPos + 1));
+tripBar.querySelector(".t-prev").onclick = () => tripGo(tripPos - 1);
+tripBar.querySelector(".t-end").onclick = stopTripTour;
+addEventListener("keydown", (e) => {
+  if (!tripActive) return;
+  if (e.key === "ArrowRight" || e.key === "Enter") tripBar.querySelector(".t-next").click();
+  if (e.key === "ArrowLeft") tripBar.querySelector(".t-prev").click();
+  if (e.key === "Escape") stopTripTour();
+});
+// headless test hook: ?triptest=1 loads a trip and starts the tour
+if (new URLSearchParams(location.search).get("triptest")) {
+  setTimeout(() => {
+    trip.push(1, 12, 22);
+    renderTrip();
+    document.getElementById("btnTripTour").click();
+  }, 600);
+}
+
+/* ---- fly tour ---- */
+let tourActive = false, tourIdx = 0, tourTimer = null;
+const tourBtn = document.getElementById("btnTour");
+function stopTour() { if (!tourActive) return; tourActive = false; clearTimeout(tourTimer); tourBtn.textContent = "✈ Fly Tour"; }
+function tourStep() {
+  if (!tourActive) return;
+  const vis = [...visibleSet];
+  if (!vis.length) return stopTour();
+  selectLandmark(vis[tourIdx % vis.length], true);
+  tourIdx++;
+  tourTimer = setTimeout(tourStep, 7000);
+}
+tourBtn.onclick = () => {
+  if (tourActive) return stopTour();
+  tourActive = true; tourBtn.textContent = "■ Stop Tour"; tourStep();
+};
+document.getElementById("btnHome").onclick = () => { stopTour(); flyHome(); };
+
+/* ---- Story Mode: "A Day in Kudla" ---- */
+const STORY = [
+  { at: "Kadri Manjunath Temple", title: "Dawn on Kadri Hill", dist: 900,
+    text: "The day begins before sunrise, with temple bells rolling down Kadri hill. Pilgrims dip in the nine spring-fed ponds while the copper roofs catch the first light — this temple has watched over Kudla for a thousand years." },
+  { at: "New Taj Mahal Café", title: "Breakfast at a Century-Old Café", dist: 620,
+    text: "Down in Kodialbail, the day's first goli baje hiss in the kadai at New Taj Mahal Café. Order a plate with a steel tumbler of filter coffee, and eat like Mangaloreans have since 1911." },
+  { at: "Clock Tower, Hampankatta", title: "The City Wakes at the Clock Tower", dist: 750,
+    text: "By nine, Hampankatta is a swirl of private buses in racing liveries, each conductor whistling a language only Kudla understands. Everything in Mangalore is measured from this roundabout — and everyone has said 'clock tower bali sigana' at least once." },
+  { at: "Old Port / Bunder", title: "A Thousand Years of Salt & Trade", dist: 900,
+    text: "At the old Bunder, fishing boats unload the morning catch where dhows from Persia and Arabia once docked. Squint past the ice crates and you can see a port that has been working, without pause, for a millennium." },
+  { at: "Sultan Battery", title: "Tipu's Watchtower & the Ferry", dist: 850,
+    text: "Upriver stands Sultan Battery, the black-stone watchtower Tipu Sultan built in 1784 to keep enemy warships out of the Gurupura. Catch the little ferry behind it — it's still the best few rupees you'll ever spend." },
+  { at: "Tannirbhavi Beach", title: "Across to Tannirbhavi", dist: 1000,
+    text: "The ferry drops you on the Bengre spit, a ribbon of sand between river and sea. Tetrapods guard the shore, casuarina and coconut lean into the breeze, and the Arabian Sea does the rest." },
+  { at: "Kudroli Gokarnanatha Temple", title: "The White & Gold of Kudroli", dist: 900,
+    text: "Back in town, Kudroli's white gopuram rises in tiers of gold. Built by Narayana Guru for communities the old temples turned away, it now hosts the city's grandest Dasara — tiger-dancers and all." },
+  { at: "Giri Manjas", title: "A Fish Meal Like No Other", dist: 620,
+    text: "Lunch is non-negotiable: a fish thali at Giri Manjas. Neer dosa soft as cloth, bangude ghee roast, anjal fry — in a room that hasn't changed in decades, because it never needed to." },
+  { at: "New Mangalore Port (NMPT)", title: "Cranes on the Horizon", dist: 1600,
+    text: "North along NH-66, the deep-water port at Panambur swings containers of coffee and cashew onto ships bound for the world — Karnataka's only major port, guarded by its long stone breakwaters." },
+  { at: "Panambur Beach", title: "Kites & Jetskis at Panambur", dist: 1100,
+    text: "Next door, Panambur is pure play: kites wrestling the sea wind, jetskis stitching white lines across the water, a parasail hanging in the blue. Stay for the camel ride; stay longer for the crowd." },
+  { at: "NITK Surathkal", title: "The Campus with its Own Beach", dist: 1300,
+    text: "Further north, NITK Surathkal spreads between highway and sea — the only elite tech campus in India whose students can walk from a lab to a lighthouse beach in five minutes." },
+  { at: "Kateel Durgaparameshwari Temple", title: "The Temple in the River", dist: 900,
+    text: "Inland, the Nandini river parts around a single islet, and on it sits Kateel's Durgaparameshwari temple. Cross the bridge as the river roars past — in monsoon it feels like walking on water." },
+  { at: "Pabbas Ice Cream", title: "The Gadbad Hour", dist: 620,
+    text: "Evening means Pabbas. Order the Gadbad — invented right here — and watch layers of ice cream, jelly and dry fruits arrive in a tall glass. 'Gadbad' means chaos. It is, gloriously." },
+  { at: "Someshwara Beach, Ullal", title: "Sunset on the Rudra Rocks", dist: 1000,
+    text: "End at Someshwara, where Rani Abbakka's temple watches waves shatter on the Rudra Shile. The sun drops into the Arabian Sea, the rocks turn gold, and Kudla's day folds shut. Naale kaanuva — see you tomorrow." },
+];
+const storyEl = document.getElementById("story");
+const sDots = storyEl.querySelector(".s-dots");
+STORY.forEach((_, i) => {
+  const d = document.createElement("span");
+  d.onclick = () => storyChapter(i);
+  sDots.appendChild(d);
+});
+let storyIdx = -1, storyOn = false;
+function storyChapter(i) {
+  storyIdx = i;
+  const ch = STORY[i];
+  const li = LANDMARKS.findIndex((l) => l.name === ch.at);
+  if (li >= 0) {
+    const l = LANDMARKS[li];
+    const tgt = new THREE.Vector3(l.x, l.y + 30, l.z);
+    const ang = (i * 1.1) % (Math.PI * 2);
+    const pos = tgt.clone().add(new THREE.Vector3(Math.cos(ang) * ch.dist, ch.dist * 0.55, Math.sin(ang) * ch.dist));
+    flight = { t: 0, p0: camera.position.clone(), p1: pos, t0: controls.target.clone(), t1: tgt };
+  }
+  storyEl.classList.remove("show");
+  setTimeout(() => {
+    storyEl.querySelector(".s-chapter").textContent = `Chapter ${i + 1} of ${STORY.length} · A Day in Kudla`;
+    storyEl.querySelector(".s-title").textContent = ch.title;
+    storyEl.querySelector(".s-text").textContent = ch.text;
+    storyEl.querySelector(".s-prev").style.visibility = i ? "visible" : "hidden";
+    storyEl.querySelector(".s-next").textContent = i === STORY.length - 1 ? "Finish ✓" : "Next ▶";
+    [...sDots.children].forEach((d, k) => d.classList.toggle("on", k === i));
+    storyEl.classList.add("show");
+  }, 450);
+}
+function startStory() {
+  storyOn = true;
+  closeCard();
+  stopTour();
+  sidebar.classList.add("hidden");
+  toggleBtn.classList.add("shifted");
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.45;
+  storyEl.classList.add("on");
+  storyChapter(0);
+}
+function exitStory() {
+  storyOn = false;
+  controls.autoRotate = false;
+  storyEl.classList.remove("show");
+  setTimeout(() => storyEl.classList.remove("on"), 400);
+  sidebar.classList.remove("hidden");
+  toggleBtn.classList.remove("shifted");
+  flyHome();
+}
+document.getElementById("btnStory").onclick = () => (storyOn ? exitStory() : startStory());
+storyEl.querySelector(".s-next").onclick = () => (storyIdx >= STORY.length - 1 ? exitStory() : storyChapter(storyIdx + 1));
+storyEl.querySelector(".s-prev").onclick = () => storyIdx > 0 && storyChapter(storyIdx - 1);
+storyEl.querySelector(".s-exit").onclick = exitStory;
+addEventListener("keydown", (e) => {
+  if (!storyOn) return;
+  if (e.key === "ArrowRight" || e.key === "Enter") storyEl.querySelector(".s-next").click();
+  if (e.key === "ArrowLeft") storyEl.querySelector(".s-prev").click();
+  if (e.key === "Escape") exitStory();
+});
+
+/* ---- sidebar toggle ---- */
+const sidebar = document.getElementById("sidebar");
+const toggleBtn = document.getElementById("toggle");
+toggleBtn.onclick = () => { sidebar.classList.toggle("hidden"); toggleBtn.classList.toggle("shifted"); };
+
+/* ============================ LOOP ============================ */
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+
+  if (flight) {
+    flight.t += 0.012;
+    const k = flight.t >= 1 ? 1 : 1 - Math.pow(1 - flight.t, 3);
+    camera.position.lerpVectors(flight.p0, flight.p1, k);
+    controls.target.lerpVectors(flight.t0, flight.t1, k);
+    if (flight.t >= 1) flight = null;
+  }
+  controls.update();
+
+  ANIMATED.forEach((o) => {
+    if (o.userData.wheel) {
+      o.rotation.z = t * 0.35;
+      o.children.forEach((ch) => { if (ch.userData.cab) ch.rotation.z = -o.rotation.z; });
+    }
+    if (o.userData.kite) {
+      o.position.y = o.userData.kite.baseY + Math.sin(t * 1.3 + o.userData.kite.phase) * 3;
+      o.rotation.z = Math.sin(t * 0.9 + o.userData.kite.phase) * 0.35;
+    }
+    if (o.userData.flame) o.scale.y = 1 + Math.sin(t * 7) * 0.25;
+  });
+
+  // ferry back & forth on the Gurupura
+  const ft = (Math.sin(t * 0.12) + 1) / 2;
+  ferry.position.set(FA.x + (FB.x - FA.x) * ft, 1.5, FA.z + (FB.z - FA.z) * ft);
+  ferry.rotation.y = Math.atan2(FB.x - FA.x, FB.z - FA.z) + (Math.cos(t * 0.12) > 0 ? 0 : Math.PI);
+
+  // plane circling the airport
+  if (AIRPORT) {
+    const a = t * 0.1;
+    plane.position.set(AIRPORT.x + Math.cos(a) * 2600, AIRPORT.y + 700, AIRPORT.z + Math.sin(a) * 2600);
+    plane.rotation.y = -a;
+  }
+
+  // Panambur watersports: speedboat towing the parasailer, jetskis zipping about
+  {
+    const a = t * 0.22;
+    const bx = WS_C.x + Math.cos(a) * 300, bz = WS_C.z + Math.sin(a) * 300;
+    speedboat.position.set(bx, 1.2, bz);
+    speedboat.rotation.y = -a;
+    chute.position.set(WS_C.x + Math.cos(a - 0.45) * 300, 95 + Math.sin(t * 0.8) * 8, WS_C.z + Math.sin(a - 0.45) * 300);
+    const j1 = t * 0.5;
+    jetskis[0].position.set(WS_C.x + Math.cos(j1) * 150, 1, WS_C.z + 120 + Math.sin(j1) * 110);
+    jetskis[0].rotation.y = -j1 + Math.PI / 2;
+    const j2 = -t * 0.38;
+    jetskis[1].position.set(WS_C.x - 140 + Math.cos(j2) * 110, 1, WS_C.z - 100 + Math.sin(j2) * 130);
+    jetskis[1].rotation.y = -j2 - Math.PI / 2;
+  }
+
+  // NH-66 traffic
+  cars.forEach((c) => {
+    const frac = ((c.off + c.dir * t * c.speed / c.path.total) % 1 + 1) % 1;
+    const p = placeOnPath(c.path, frac, c.lane);
+    c.mesh.position.set(p.x, p.y, p.z);
+    c.mesh.rotation.y = p.rot + (c.dir > 0 ? 0 : Math.PI) + Math.PI / 2;
+  });
+  // cargo ships steaming toward the port
+  ships.forEach((s, i) => {
+    s.position.z += (i ? -1 : 1) * 6 * 0.16;
+    if (s.position.z > 10000) s.position.z = -30000;
+    if (s.position.z < -30000) s.position.z = 10000;
+  });
+
+  clouds.forEach((c, i) => {
+    c.position.x += 1.6 + (i % 3) * 0.5;
+    if (c.position.x > TX1 + 3000) c.position.x = TX0 - 3000;
+  });
+
+  renderer.render(scene, camera);
+  updateLabels();
+}
+animate();
+</script>
+</body>
+</html>
