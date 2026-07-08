@@ -3,84 +3,44 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Mangalore Atlas — 3D World</title>
+<title>Mangalore Atlas v2 — MapLibre 3D</title>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
-<script src="https://unpkg.com/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
 <style>
-  :root {
-    --panel: rgba(255, 255, 255, 0.96);
-    --dark: #1c2733;
-    --accent: #ff8a3d;
-    --muted: #6b7a88;
-  }
+  :root { --panel: rgba(255,255,255,0.96); --dark: #1c2733; --accent: #ff8a3d; --muted: #6b7a88; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; background: #a8d8ef; color: var(--dark); -webkit-user-select: none; user-select: none; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; color: var(--dark);
+         -webkit-user-select: none; user-select: none; }
   #search { -webkit-user-select: text; user-select: text; }
-  #scene { position: absolute; inset: 0; }
-  #labels { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+  #map { position: absolute; inset: 0; }
 
-  .pill {
-    position: absolute; transform: translate(-50%, -130%);
-    background: var(--panel); border-radius: 10px; padding: 5px 10px 5px 7px;
-    font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer;
-    box-shadow: 0 2px 8px rgba(20,40,60,0.25), 0 0 0 1px rgba(20,40,60,0.06);
-    pointer-events: auto; display: flex; align-items: center; gap: 5px;
-    transition: box-shadow 0.15s;
-  }
-  .pill:hover { box-shadow: 0 4px 14px rgba(20,40,60,0.35), 0 0 0 2px var(--accent); z-index: 5; }
-  .pill .ic { font-size: 13px; }
-  .area {
-    position: absolute; transform: translate(-50%, -50%); pointer-events: none;
-    color: #6f7a84; font-size: 10px; font-weight: 700; letter-spacing: 2.5px;
-    text-shadow: 0 1px 3px rgba(255,255,255,0.7); white-space: nowrap;
-  }
-  .pill::after {
-    content: ""; position: absolute; left: 50%; bottom: -5px; transform: translateX(-50%);
-    border: 5px solid transparent; border-top-color: var(--panel); border-bottom: none;
-  }
-
-  #sidebar {
-    position: absolute; top: 0; left: 0; bottom: 0; width: 320px; z-index: 10;
-    background: var(--panel); backdrop-filter: blur(10px);
-    display: flex; flex-direction: column;
-    border-right: 1px solid rgba(20,40,60,0.1);
-    transition: transform 0.25s ease;
-  }
+  #sidebar { position: absolute; top: 0; left: 0; bottom: 0; width: 320px; z-index: 10;
+    background: var(--panel); backdrop-filter: blur(10px); display: flex; flex-direction: column;
+    border-right: 1px solid rgba(20,40,60,0.1); transition: transform 0.25s ease; }
   #sidebar.hidden { transform: translateX(-100%); }
   #sidebar header { padding: 16px 16px 8px; }
   #sidebar h1 { font-size: 20px; }
   #sidebar h1 span { color: var(--accent); }
   #sidebar .sub { font-size: 11.5px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
-
-  #search {
-    margin: 8px 16px; padding: 9px 12px; border-radius: 8px;
-    border: 1px solid rgba(20,40,60,0.15); background: #fff; color: var(--dark);
-    font-size: 13px; outline: none;
-  }
+  #search { margin: 8px 16px; padding: 9px 12px; border-radius: 8px; border: 1px solid rgba(20,40,60,0.15);
+    background: #fff; font-size: 13px; outline: none; }
   #search:focus { border-color: var(--accent); }
-
   #filters { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 16px 8px; }
-  .chip {
-    font-size: 11px; padding: 4px 9px; border-radius: 999px; cursor: pointer;
-    border: 1px solid rgba(20,40,60,0.2); background: transparent; color: var(--muted);
-    user-select: none; transition: all 0.15s;
-  }
+  .chip { font-size: 11px; padding: 4px 9px; border-radius: 999px; cursor: pointer;
+    border: 1px solid rgba(20,40,60,0.2); background: transparent; color: var(--muted); transition: all 0.15s; }
   .chip.active { color: #fff; font-weight: 600; border-color: transparent; }
-
   #list { flex: 1; overflow-y: auto; padding: 4px 8px 8px; }
   .item { padding: 8px 10px; border-radius: 8px; cursor: pointer; display: flex; gap: 10px; align-items: center; }
   .item:hover { background: rgba(20,40,60,0.06); }
   .item .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-  .item .add {
-    flex-shrink: 0; width: 24px; height: 24px; border-radius: 7px; cursor: pointer;
-    border: 1px solid rgba(20,40,60,0.2); background: transparent; color: var(--muted);
-    font-size: 14px; line-height: 1; display: none;
-  }
+  .item .name { font-size: 13px; }
+  .item .cat { font-size: 10.5px; color: var(--muted); }
+  .item .add { flex-shrink: 0; width: 24px; height: 24px; border-radius: 7px; cursor: pointer;
+    border: 1px solid rgba(20,40,60,0.2); background: transparent; color: var(--muted); font-size: 14px; display: none; }
   .item:hover .add { display: block; }
   .item .add:hover { border-color: var(--accent); color: var(--accent); }
   .item .add.in { display: block; border-color: transparent; color: #2e7d32; font-weight: 700; }
-  .item .name { font-size: 13px; }
-  .item .cat { font-size: 10.5px; color: var(--muted); }
 
   #trip { border-top: 1px solid rgba(20,40,60,0.1); padding: 10px 16px 14px; max-height: 34%; overflow-y: auto; }
   #trip h2 { font-size: 13px; color: var(--accent); margin-bottom: 6px; }
@@ -91,114 +51,84 @@
   .trip-item .x { cursor: pointer; color: var(--muted); padding: 0 4px; }
   .trip-item .x:hover { color: #e53935; }
   #trip .trip-btns { display: flex; gap: 8px; margin-top: 8px; }
-  #trip button {
-    flex: 1; background: var(--accent); border: none; border-radius: 7px; padding: 7px 0;
-    font-size: 12px; font-weight: 700; cursor: pointer; color: #fff;
-  }
+  #trip button { flex: 1; background: var(--accent); border: none; border-radius: 7px; padding: 7px 0;
+    font-size: 12px; font-weight: 700; cursor: pointer; color: #fff; }
   #trip button.ghost { background: transparent; border: 1px solid rgba(20,40,60,0.2); color: var(--muted); }
 
-  #toggle {
-    position: absolute; top: 12px; left: 332px; z-index: 11;
-    background: var(--panel); color: var(--dark); border: 1px solid rgba(20,40,60,0.15);
-    border-radius: 8px; padding: 8px 11px; cursor: pointer; font-size: 14px;
-    transition: left 0.25s ease;
-  }
+  #toggle { position: absolute; top: 12px; left: 332px; z-index: 11; background: var(--panel);
+    border: 1px solid rgba(20,40,60,0.15); border-radius: 8px; padding: 8px 11px; cursor: pointer;
+    font-size: 14px; transition: left 0.25s ease; }
   #toggle.shifted { left: 12px; }
 
   #controls { position: absolute; bottom: 58px; right: 12px; z-index: 10; display: flex; flex-direction: column; gap: 8px; }
-  #controls button {
-    background: var(--panel); color: var(--dark); border: 1px solid rgba(20,40,60,0.15);
-    border-radius: 8px; padding: 8px 12px; cursor: pointer; font-size: 12px; font-weight: 600;
-  }
+  #controls button { background: var(--panel); color: var(--dark); border: 1px solid rgba(20,40,60,0.15);
+    border-radius: 8px; padding: 8px 12px; cursor: pointer; font-size: 12px; font-weight: 600; }
   #controls button:hover { border-color: var(--accent); }
 
-  #card {
-    position: absolute; right: 12px; top: 12px; width: 290px; z-index: 12;
-    background: var(--panel); border-radius: 14px; padding: 16px;
-    box-shadow: 0 8px 30px rgba(20,40,60,0.3); display: none;
-  }
-  #card .c-title { font-weight: 800; font-size: 15px; padding-right: 18px; }
-  #card .c-cat { font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px; margin: 3px 0 7px; font-weight: 700; }
-  #card .c-desc { font-size: 12.5px; color: #40505e; line-height: 1.5; }
-  #card .c-fact {
-    font-size: 11.5px; margin-top: 9px; padding: 8px 10px; background: rgba(255,138,61,0.1);
-    border-left: 3px solid var(--accent); border-radius: 4px; line-height: 1.45; color: #533a22;
-  }
-  #card .c-add {
-    margin-top: 10px; width: 100%; background: var(--accent); color: #fff; border: none;
-    border-radius: 8px; padding: 8px 0; font-size: 12.5px; font-weight: 700; cursor: pointer;
-  }
-  #card .c-add:disabled { background: rgba(20,40,60,0.15); color: var(--muted); cursor: default; }
-  #card .c-close { position: absolute; right: 10px; top: 8px; cursor: pointer; color: var(--muted); font-size: 16px; }
+  .maplibregl-popup-content { border-radius: 12px; padding: 14px 16px; max-width: 270px;
+    box-shadow: 0 6px 24px rgba(20,40,60,0.35); }
+  .p-title { font-weight: 800; font-size: 14px; padding-right: 12px; }
+  .p-cat { font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px; margin: 2px 0 6px; font-weight: 700; }
+  .p-desc { font-size: 12px; color: #40505e; line-height: 1.5; }
+  .p-fact { font-size: 11.5px; margin-top: 8px; padding: 7px 9px; background: rgba(255,138,61,0.1);
+    border-left: 3px solid var(--accent); border-radius: 4px; line-height: 1.45; color: #533a22; }
+  .p-add { margin-top: 9px; width: 100%; background: var(--accent); color: #fff; border: none;
+    border-radius: 7px; padding: 7px 0; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .p-add:disabled { background: rgba(20,40,60,0.15); color: var(--muted); cursor: default; }
 
-  #credit {
-    position: absolute; right: 12px; bottom: 18px; z-index: 10;
-    display: flex; align-items: center; gap: 6px;
-    background: var(--panel); border: 1px solid rgba(20,40,60,0.12); border-radius: 999px;
-    padding: 6px 13px; font-size: 11px; color: var(--muted);
-    box-shadow: 0 2px 8px rgba(20,40,60,0.15);
-  }
-  #credit a { display: flex; align-items: center; gap: 5px; color: var(--muted); text-decoration: none; transition: color 0.15s; }
-  #credit a:hover { color: var(--accent); }
-  #credit a:hover strong { color: var(--accent); }
-  #credit strong { color: var(--dark); font-weight: 700; }
-  #credit .sep { color: rgba(20,40,60,0.25); }
-  #tripbar {
-    position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%);
-    z-index: 13; display: none; align-items: center; gap: 10px;
-    background: rgba(18, 26, 34, 0.92); color: #f2ede4; border-radius: 12px;
-    padding: 10px 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); backdrop-filter: blur(8px);
-  }
+  #tripbar { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 13;
+    display: none; align-items: center; gap: 10px; background: rgba(18,26,34,0.92); color: #f2ede4;
+    border-radius: 12px; padding: 10px 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); backdrop-filter: blur(8px); }
   #tripbar.on { display: flex; }
   #tripbar .t-label { font-size: 13px; font-weight: 700; margin-right: 4px; }
-  #tripbar .s-btn {
-    background: rgba(255,255,255,0.08); color: #f2ede4; border: 1px solid rgba(255,255,255,0.18);
-    border-radius: 8px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; font-weight: 600;
-  }
+  .s-btn { background: rgba(255,255,255,0.08); color: #f2ede4; border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 8px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; font-weight: 600; }
+  .s-btn:hover { border-color: #ff8a3d; }
   #tripbar .t-next { background: #ff8a3d; color: #14100b; border-color: transparent; }
-  #tripbar .s-btn:hover { border-color: #ff8a3d; }
-  #story {
-    position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px);
-    width: min(620px, 92vw); z-index: 14; display: none; opacity: 0;
-    background: rgba(18, 26, 34, 0.92); color: #f2ede4; border-radius: 16px;
-    padding: 20px 24px 14px; box-shadow: 0 12px 40px rgba(0,0,0,0.45);
-    backdrop-filter: blur(8px); transition: opacity 0.5s, transform 0.5s;
-  }
+
+  #story { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px);
+    width: min(620px, 92vw); z-index: 14; display: none; opacity: 0; background: rgba(18,26,34,0.92);
+    color: #f2ede4; border-radius: 16px; padding: 20px 24px 14px; box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+    backdrop-filter: blur(8px); transition: opacity 0.5s, transform 0.5s; }
   #story.on { display: block; }
   #story.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   #story .s-chapter { font-size: 10.5px; letter-spacing: 2.5px; color: #ff8a3d; font-weight: 700; text-transform: uppercase; }
   #story .s-title { font-size: 21px; font-weight: 800; margin: 4px 0 8px; }
   #story .s-text { font-size: 13.5px; line-height: 1.65; color: #cfd6d3; }
   #story .s-nav { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
-  #story .s-btn {
-    background: rgba(255,255,255,0.08); color: #f2ede4; border: 1px solid rgba(255,255,255,0.18);
-    border-radius: 8px; padding: 7px 14px; font-size: 12.5px; cursor: pointer; font-weight: 600;
-  }
-  #story .s-btn:hover { border-color: #ff8a3d; }
   #story .s-next { background: #ff8a3d; color: #14100b; border-color: transparent; }
   #story .s-exit { margin-left: auto; padding: 7px 10px; color: #98a2ab; }
   #story .s-dots { display: flex; gap: 5px; flex: 1; justify-content: center; }
   #story .s-dots span { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.22); cursor: pointer; }
   #story .s-dots span.on { background: #ff8a3d; }
 
+  #credit { position: absolute; right: 12px; bottom: 18px; z-index: 10; display: flex; align-items: center; gap: 6px;
+    background: var(--panel); border: 1px solid rgba(20,40,60,0.12); border-radius: 999px; padding: 6px 13px;
+    font-size: 11px; color: var(--muted); box-shadow: 0 2px 8px rgba(20,40,60,0.15); }
+  #credit a { display: flex; align-items: center; gap: 5px; color: var(--muted); text-decoration: none; }
+  #credit a:hover, #credit a:hover strong { color: var(--accent); }
+  #credit strong { color: var(--dark); font-weight: 700; }
+  #credit .sep { color: rgba(20,40,60,0.25); }
+
+  .marker { width: 14px; height: 14px; border-radius: 50%; border: 2.5px solid #fff; cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.45); }
   @media (max-width: 640px) { #sidebar { width: 260px; } #toggle { left: 272px; } }
 </style>
 </head>
 <body>
-<canvas id="scene"></canvas>
-<div id="labels"></div>
+<div id="map"></div>
 
 <div id="sidebar">
   <header>
-    <h1>Mangalore <span>Atlas</span></h1>
-    <div class="sub">A hand-built 3D world of Kudla. Drag to orbit, scroll to zoom, right-drag to pan. Click any label to explore.</div>
+    <h1>Mangalore <span>Atlas</span> <small style="font-size:11px;color:var(--muted)">v2 · MapLibre</small></h1>
+    <div class="sub">Real map tiles + 3D extruded buildings &amp; terrain. Drag to pan, right-drag to tilt &amp; rotate.</div>
   </header>
   <input id="search" type="text" placeholder="Search landmarks…" />
   <div id="filters"></div>
   <div id="list"></div>
   <div id="trip">
     <h2>🧳 My Trip <span id="tripCount"></span></h2>
-    <div id="tripList"><div class="empty">Click "Add to trip" on any landmark to plan your Mangalore itinerary.</div></div>
+    <div id="tripList"><div class="empty">Click "＋" or "Add to trip" on any landmark to plan your itinerary.</div></div>
     <div class="trip-btns" id="tripBtns" style="display:none">
       <button id="btnTripTour">▶ Tour my trip</button>
       <button id="btnTripClear" class="ghost">Clear</button>
@@ -210,17 +140,9 @@
 <div id="controls">
   <button id="btnStory" style="border-color:#ff8a3d;font-weight:700">📖 Story Mode</button>
   <button id="btnTour">✈ Fly Tour</button>
+  <button id="btn3d">3D View</button>
+  <button id="btnTop">Top View</button>
   <button id="btnHome">⌂ Reset View</button>
-  <button id="btnMaplibre" onclick="window.open('v2-maplibre.html','_blank')" style="border-color:#4264fb">🗺 MapLibre</button>
-</div>
-
-<div id="credit">
-  <a href="https://github.com/dev-shetty/mangalore-atlas" target="_blank" rel="noopener" title="View the repo">
-    <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
-    mangalore-atlas
-  </a>
-  <span class="sep">·</span>
-  <a href="https://github.com/dev-shetty" target="_blank" rel="noopener">Created by&nbsp;<strong>Deveesh Shetty</strong></a>
 </div>
 
 <div id="tripbar">
@@ -242,17 +164,16 @@
   </div>
 </div>
 
-<div id="card">
-  <span class="c-close" onclick="closeCard()">✕</span>
-  <div class="c-title"></div>
-  <div class="c-cat"></div>
-  <div class="c-desc"></div>
-  <div class="c-fact"></div>
-  <button class="c-add"></button>
+<div id="credit">
+  <a href="https://github.com/dev-shetty/mangalore-atlas" target="_blank" rel="noopener" title="View the repo">
+    <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+    mangalore-atlas
+  </a>
+  <span class="sep">·</span>
+  <a href="https://github.com/dev-shetty" target="_blank" rel="noopener">Created by&nbsp;<strong>Deveesh Shetty</strong></a>
 </div>
 
 <script>
-/* ============================ DATA ============================ */
 const CATEGORIES = {
   temple:   { label: "Temples & Worship", color: "#ff7043", icon: "🛕" },
   beach:    { label: "Beaches",           color: "#29b6f6", icon: "🏖️" },
@@ -475,563 +396,79 @@ const LANDMARKS = [
     fact: "Entry costs almost nothing and it's usually blissfully empty — a hidden gem." },
 ];
 
-/* ==================== GEOGRAPHY (stylized Mangalore) ==================== */
-const C_LNG = 74.8420, C_LAT = 12.8700;
-const MPD_X = 108500, MPD_Z = 110574; // metres per degree
-const ll = (lng, lat) => ({ x: (lng - C_LNG) * MPD_X, z: -(lat - C_LAT) * MPD_Z });
+const CITY_CENTER = [74.8420, 12.8700];
 
-LANDMARKS.forEach((l) => { const p = ll(l.lng, l.lat); l.x = p.x; l.z = p.z; });
-
-// deterministic value noise
-function hash2(ix, iz) { const n = Math.sin(ix * 127.1 + iz * 311.7) * 43758.5453; return n - Math.floor(n); }
-function vnoise(x, z) {
-  const ix = Math.floor(x), iz = Math.floor(z), fx = x - ix, fz = z - iz;
-  const sx = fx * fx * (3 - 2 * fx), sz = fz * fz * (3 - 2 * fz);
-  const a = hash2(ix, iz), b = hash2(ix + 1, iz), c = hash2(ix, iz + 1), d = hash2(ix + 1, iz + 1);
-  return a + (b - a) * sx + (c - a) * sz + (a - b - c + d) * sx * sz;
-}
-function fbm(x, z) {
-  let v = 0, amp = 0.5, f = 1;
-  for (let i = 0; i < 4; i++) { v += amp * vnoise(x * f, z * f); amp *= 0.5; f *= 2.1; }
-  return v;
-}
-
-// coastline: x position of shore as function of z (north = negative z)
-// includes the Bengre sand spit (12.895 → 12.845) with the estuary opening at its tip
-const COAST_PTS = [
-  [13.300, 74.740], [13.240, 74.745], [13.190, 74.755], [13.140, 74.770], [13.100, 74.790],
-  [13.069, 74.797], [13.038, 74.792], [13.005, 74.790], [12.975, 74.798],
-  [12.955, 74.804], [12.937, 74.805], [12.918, 74.808], [12.903, 74.809], [12.885, 74.810],
-  [12.868, 74.813], [12.853, 74.818], [12.846, 74.822], [12.843, 74.828], [12.815, 74.833],
-  [12.780, 74.838], [12.740, 74.841],
-].map(([lat, lng]) => ({ z: ll(lng, lat).z, x: ll(lng, lat).x }));
-function coastX(z) {
-  const p = COAST_PTS;
-  if (z <= p[0].z) return p[0].x;
-  for (let i = 0; i < p.length - 1; i++) {
-    if (z >= p[i].z && z <= p[i + 1].z) {
-      const t = (z - p[i].z) / (p[i + 1].z - p[i].z);
-      return p[i].x + t * (p[i + 1].x - p[i].x);
-    }
-  }
-  return p[p.length - 1].x;
-}
-
-// rivers as polylines [lng,lat] — REAL courses:
-// Gurupura flows in from the east, turns SOUTH at Kulur and runs behind the
-// Bengre spit past Sultan Battery & the Old Port to the shared estuary (~12.845).
-// Netravati comes from the south-east past Adyar/Jeppinamogaru and bends NW to the same mouth.
-const RIVERS = [
-  { w: 320, pts: [[74.935, 12.934], [74.905, 12.9265], [74.875, 12.9215], [74.848, 12.9145], [74.830, 12.908],
-                  [74.820, 12.903], [74.8165, 12.895], [74.8185, 12.884], [74.822, 12.872], [74.826, 12.858], [74.828, 12.847]] }, // Gurupura/Phalguni
-  { w: 360, pts: [[74.945, 12.866], [74.912, 12.863], [74.893, 12.858], [74.876, 12.854], [74.862, 12.851],
-                  [74.851, 12.846], [74.844, 12.841], [74.836, 12.842], [74.828, 12.847]] },                                        // Netravati
-  { w: 500, pts: [[74.828, 12.847], [74.816, 12.8445]] },                                                                           // estuary mouth to the sea
-  { w: 260, pts: [[74.950, 13.000], [74.912, 13.0035], [74.8855, 13.0030], [74.860, 13.0065], [74.828, 13.037], [74.798, 13.068]] },  // Nandini — flows around the Kateel islet
-  { w: 240, pts: [[74.870, 13.104], [74.835, 13.098], [74.810, 13.094], [74.796, 13.087], [74.789, 13.073]] },                        // Shambhavi at Mulki
-];
-RIVERS.forEach((r) => { r.xz = r.pts.map(([lng, lat]) => ll(lng, lat)); });
-
-function distSeg(px, pz, ax, az, bx, bz) {
-  const dx = bx - ax, dz = bz - az;
-  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / (dx * dx + dz * dz)));
-  const gx = ax + t * dx - px, gz = az + t * dz - pz;
-  return Math.sqrt(gx * gx + gz * gz);
-}
-function riverDist(x, z) {
-  let best = 1e9;
-  for (const r of RIVERS) {
-    for (let i = 0; i < r.xz.length - 1; i++) {
-      const d = distSeg(x, z, r.xz[i].x, r.xz[i].z, r.xz[i + 1].x, r.xz[i + 1].z) - (r.w - 260);
-      if (d < best) best = d;
-    }
-  }
-  return best;
-}
-
-const HILLS = [
-  { lng: 74.8570, lat: 12.8870, r: 950, h: 45 },   // Kadri hill (temple on its west slope)
-  { lng: 74.8425, lat: 12.8722, r: 560, h: 42 },   // Lighthouse hill (chapel, college, garden)
-  { lng: 74.9261, lat: 12.8166, r: 1700, h: 80 },  // Konaje
-  { lng: 74.8987, lat: 12.9193, r: 1300, h: 45 },  // Pilikula ridge
-  { lng: 74.8890, lat: 12.9610, r: 1150, h: 85 },  // Bajpe tabletop (hilltop airport)
-  { lng: 74.8580, lat: 12.8650, r: 900, h: 32 },   // Nanthoor–Pumpwell ridge
-  { lng: 74.8982, lat: 12.8090, r: 1200, h: 50 },  // Deralakatte plateau
-  { lng: 74.8650, lat: 12.9580, r: 1000, h: 30 },  // Katipalla rise (MRPL)
-].map((h) => ({ ...h, ...ll(h.lng, h.lat) }));
-const KATEEL = ll(74.8855, 13.0030);
-
-function rawHeight(x, z) {
-  const d = x - coastX(z); // metres inland
-  if (d < 0) return -7 - Math.min(22, -d * 0.011); // sea floor drops fast: crisp dark coast
-  let h;
-  if (d < 260) h = 1.2 + d * 0.004; // beach sand
-  else {
-    const inland = Math.min(1, (d - 260) / 9000);
-    h = 2.5 + inland * 26 + fbm(x * 0.00035, z * 0.00035) * inland * 55;
-  }
-  for (const hill of HILLS) {
-    const dh = Math.hypot(x - hill.x, z - hill.z);
-    if (dh < hill.r) {
-      const t = Math.cos((dh / hill.r) * Math.PI) * 0.5 + 0.5;
-      h += hill.h * t * t;
-    }
-  }
-  // carve rivers
-  const rd = riverDist(x, z);
-  if (rd < 260) {
-    const t = Math.max(0, rd / 260);
-    const bank = t * t;
-    h = h * bank + (-5) * (1 - bank);
-  }
-  // Kateel islet in the river
-  const dk = Math.hypot(x - KATEEL.x, z - KATEEL.z);
-  if (dk < 150) h = Math.max(h, 3.2 * (1 - dk / 150) + 1.5);
-  return h;
-}
-
-// each landmark sits at its REAL elevation (alt, metres ASL); the terrain blends
-// up/down to meet it across a flatten pad — so hilltop places are genuinely on hills.
-LANDMARKS.forEach((l) => {
-  l.y = l.alt !== undefined ? l.alt : Math.max(rawHeight(l.x, l.z), l.cat === "beach" ? 1.4 : 1.0);
-  l.padR = l.pad || 240;
+/* ============================ MAP ============================ */
+const map = new maplibregl.Map({
+  container: "map",
+  style: "https://tiles.openfreemap.org/styles/liberty",
+  center: CITY_CENTER,
+  zoom: 13.2,
+  pitch: 60,
+  bearing: -15,
+  antialias: true,
+  maxPitch: 78,
+  maxBounds: [[74.50, 12.55], [75.22, 13.48]],  // keep the camera on greater Mangalore
+  minZoom: 9.4,
 });
-function heightAt(x, z) {
-  let h = rawHeight(x, z);
-  for (const l of LANDMARKS) {
-    const d = Math.hypot(x - l.x, z - l.z);
-    if (d < l.padR) {
-      const t = 1 - d / l.padR;
-      const w = t * t * (3 - 2 * t);
-      h = h * (1 - w) + l.y * w;
-    }
-  }
-  return h;
-}
+map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+map.addControl(new maplibregl.ScaleControl(), "bottom-left");
 
-/* ============================ SCENE ============================ */
-const canvas = document.getElementById("scene");
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setSize(innerWidth, innerHeight);
+map.on("load", () => {
+  // NOTE: no 3D terrain here — MapLibre custom layers jitter/float when terrain
+  // is enabled (float32 matrix precision), so v2 keeps the ground flat and stable.
+  map.setSky && map.setSky({ "sky-color": "#87ceeb", "horizon-color": "#f0e6d2", "fog-color": "#e8e0d8", "sky-horizon-blend": 0.6 });
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x8ec9ec);
-scene.fog = new THREE.Fog(0xaad4ee, 48000, 115000);
+  // fill-extrusion: turn OSM building polygons into 3D blocks
+  const layers = map.getStyle().layers;
+  const labelLayer = layers.find((l) => l.type === "symbol" && l.layout && l.layout["text-field"]);
+  try {
+    map.addLayer({
+      id: "3d-buildings",
+      source: "openmaptiles",
+      "source-layer": "building",
+      type: "fill-extrusion",
+      minzoom: 14,
+      paint: {
+        "fill-extrusion-color": [
+          "interpolate", ["linear"], ["coalesce", ["get", "render_height"], 10],
+          0, "#d8cfc0", 25, "#c4b8a4", 60, "#a8988a",
+        ],
+        "fill-extrusion-height": ["coalesce", ["get", "render_height"], 10],
+        "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
+        "fill-extrusion-opacity": 0.85,
+      },
+    }, labelLayer && labelLayer.id);
+  } catch (e) { console.warn("3D buildings unavailable:", e); }
 
-const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 10, 120000);
-const HOME_POS = new THREE.Vector3(-11500, 8200, 10500);
-const HOME_TGT = new THREE.Vector3(1500, 0, -2500);
-camera.position.copy(HOME_POS);
+  map.addLayer(modelLayer);
 
-// debug/deep-link: ?cam=px,py,pz,tx,ty,tz positions the camera
-{
-  const q = new URLSearchParams(location.search).get("cam");
-  if (q) {
-    const [px, py, pz, tx, ty, tz] = q.split(",").map(Number);
-    camera.position.set(px, py, pz);
-    HOME_TGT.set(tx, ty, tz);
-  }
-}
-const controls = new THREE.OrbitControls(camera, canvas);
-controls.target.copy(HOME_TGT);
-controls.enableDamping = true;
-controls.dampingFactor = 0.08;
-controls.maxPolarAngle = 1.45;
-controls.minDistance = 250;
-controls.maxDistance = 52000;
+  // vibrancy pass: saturate the muted liberty palette (greens, sand, water, roads)
+  const paint = (id, prop, val) => { try { map.setPaintProperty(id, prop, val); } catch (e) {} };
+  paint("background", "background-color", "#f2ead6");
+  paint("water", "fill-color", "#2f83c5");
+  paint("waterway_river", "line-color", "#2f83c5");
+  paint("waterway_other", "line-color", "#2f83c5");
+  paint("park", "fill-color", "#a9d78f");
+  paint("landcover_grass", "fill-color", "#a9d78f");
+  paint("landcover_wood", "fill-color", "#7cb56a");
+  paint("landuse_pitch", "fill-color", "#8fcf7e");
+  paint("landcover_sand", "fill-color", "#f6d998");
+  paint("landuse_residential", "fill-color", "#ede2cb");
+  paint("landuse_school", "fill-color", "#f3e4c3");
+  paint("landuse_hospital", "fill-color", "#f5dede");
+  paint("road_motorway", "line-color", "#f59a4d");
+  paint("road_trunk_primary", "line-color", "#f6ad63");
+  paint("road_secondary_tertiary", "line-color", "#fbd07f");
+  paint("road_minor", "line-color", "#ffffff");
+  paint("road_minor_casing", "line-color", "#b9c0c9");
+  paint("road_secondary_tertiary_casing", "line-color", "#d19a52");
+  paint("road_trunk_primary_casing", "line-color", "#d98f3f");
+  paint("bridge_trunk_primary", "line-color", "#f6ad63");
+  paint("bridge_secondary_tertiary", "line-color", "#fbd07f");
+});
 
-scene.add(new THREE.HemisphereLight(0xd9ecff, 0x94865f, 0.62));
-const sun = new THREE.DirectionalLight(0xfff3da, 1.18);
-sun.position.set(-8000, 14000, -6000);
-scene.add(sun);
-
-/* ---- terrain ---- */
-const TX0 = -11000, TX1 = 14000, TZ0 = -40500, TZ1 = 11500;
-const SEGX = 190, SEGZ = 340;
-const terrainGeo = new THREE.PlaneGeometry(TX1 - TX0, TZ1 - TZ0, SEGX, SEGZ);
-terrainGeo.rotateX(-Math.PI / 2);
-{
-  const pos = terrainGeo.attributes.position;
-  const colors = new Float32Array(pos.count * 3);
-  const cDeep = new THREE.Color(0x0d3f6d), cShallow = new THREE.Color(0x3f89ad),
-    cSand = new THREE.Color(0xefd493), cPlain = new THREE.Color(0xe4d6ab),
-    cGreen1 = new THREE.Color(0x93b65c), cGreen2 = new THREE.Color(0x6a9450), tmp = new THREE.Color();
-  const BEACH_XZ = LANDMARKS.filter((l) => l.cat === "beach").map((l) => [l.x, l.z]);
-  const nearBeach = (x, z) => BEACH_XZ.some(([bx, bz]) => (x - bx) * (x - bx) + (z - bz) * (z - bz) < 550 * 550);
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i) + (TX0 + TX1) / 2, z = pos.getZ(i) + (TZ0 + TZ1) / 2;
-    const h = heightAt(x, z);
-    pos.setY(i, h);
-    pos.setX(i, x); pos.setZ(i, z);
-    if (h < 0) tmp.copy(cDeep).lerp(cShallow, Math.min(1, (h + 16) / 16));
-    else if (h < 2.4 || (h < 5.5 && nearBeach(x, z))) tmp.copy(cSand);   // wide sandy aprons at beaches
-    else if (h < 22) {
-      tmp.copy(cPlain).lerp(cGreen1, Math.max(0, Math.min(1, fbm(x * 0.0011, z * 0.0011) - 0.40) * 2.4));
-    } else if (h < 48) tmp.copy(cGreen1);
-    else tmp.copy(cGreen2);
-    colors[i * 3] = tmp.r; colors[i * 3 + 1] = tmp.g; colors[i * 3 + 2] = tmp.b;
-  }
-  terrainGeo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-  terrainGeo.computeVertexNormals();
-  // slope shading: darken steep faces so hills, valleys and the Bajpe tabletop read in relief
-  const nrm = terrainGeo.attributes.normal;
-  for (let i = 0; i < pos.count; i++) {
-    if (pos.getY(i) < 0.5) continue;
-    const ny = Math.max(0, nrm.getY(i));
-    const shade = 0.52 + 0.48 * ny * ny;
-    colors[i * 3] *= shade; colors[i * 3 + 1] *= shade; colors[i * 3 + 2] *= shade;
-  }
-  terrainGeo.attributes.color.needsUpdate = true;
-}
-const terrain = new THREE.Mesh(terrainGeo, new THREE.MeshPhongMaterial({ vertexColors: true, flatShading: true, shininess: 0 }));
-scene.add(terrain);
-
-/* ---- water ---- */
-const water = new THREE.Mesh(
-  new THREE.PlaneGeometry(90000, 90000),
-  new THREE.MeshLambertMaterial({ color: 0x1c60a0, transparent: true, opacity: 0.93 })
-);
-water.rotation.x = -Math.PI / 2;
-water.position.set(0, 0, -7000);
-scene.add(water);
-
-/* ---- roads ---- */
-function makeRoad(lls, width = 70, color = 0x7d8590) {
-  const pts = lls.map(([lng, lat]) => ll(lng, lat));
-  // resample
-  const path = [];
-  for (let i = 0; i < pts.length - 1; i++) {
-    const a = pts[i], b = pts[i + 1];
-    const n = Math.max(2, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 160));
-    for (let j = 0; j < n; j++) path.push({ x: a.x + ((b.x - a.x) * j) / n, z: a.z + ((b.z - a.z) * j) / n });
-  }
-  path.push(pts[pts.length - 1]);
-  const verts = [], idx = [];
-  for (let i = 0; i < path.length; i++) {
-    const p = path[i], q = path[Math.min(i + 1, path.length - 1)], o = path[Math.max(i - 1, 0)];
-    let dx = q.x - o.x, dz = q.z - o.z;
-    const len = Math.hypot(dx, dz) || 1;
-    const nx = -dz / len, nz = dx / len;
-    const y = Math.max(heightAt(p.x, p.z), 1.0) + 1.6;
-    verts.push(p.x + nx * width / 2, y, p.z + nz * width / 2, p.x - nx * width / 2, y, p.z - nz * width / 2);
-    if (i < path.length - 1) {
-      const k = i * 2;
-      idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
-    }
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(verts), 3));
-  g.setIndex(idx);
-  g.computeVertexNormals();
-  const mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color }));
-  scene.add(mesh);
-}
-// NH-66: hugs the coast in the north, crosses the Gurupura at Kulur bridge,
-// runs INLAND through the city (Bejai–Nanthoor–Pumpwell), crosses the Netravati at Ullal.
-const NH66_PTS = [
-  [74.762, 13.240], [74.775, 13.190], [74.786, 13.140], [74.797, 13.095],
-  [74.800, 13.090], [74.801, 13.050], [74.796, 13.010], [74.802, 12.975], [74.808, 12.950],
-  [74.810, 12.930], [74.812, 12.915], [74.8145, 12.906], [74.8215, 12.8985], [74.830, 12.9015],
-  [74.8365, 12.8985], [74.845, 12.891], [74.850, 12.880], [74.856, 12.869], [74.8585, 12.857],
-  [74.853, 12.848], [74.8425, 12.8455], [74.8425, 12.836], [74.845, 12.824], [74.8455, 12.807],
-  [74.841, 12.780], [74.841, 12.745],
-];
-makeRoad(NH66_PTS, 130, 0x656c76);
-// bridges (deck + pillars) at the two big NH-66 river crossings
-function makeBridge(lngA, latA, lngB, latB, width = 90) {
-  const a = ll(lngA, latA), b = ll(lngB, latB);
-  const len = Math.hypot(b.x - a.x, b.z - a.z);
-  const g = new THREE.Group();
-  const deck = new THREE.Mesh(new THREE.BoxGeometry(len, 8, width), new THREE.MeshLambertMaterial({ color: 0x7d848c }));
-  deck.position.y = 14;
-  g.add(deck);
-  const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 4, 6), new THREE.MeshLambertMaterial({ color: 0xb8bec5 }));
-  rail.position.set(0, 20, width / 2 - 3); g.add(rail);
-  const rail2 = rail.clone(); rail2.position.z = -width / 2 + 3; g.add(rail2);
-  const nP = Math.max(2, Math.round(len / 220));
-  for (let i = 0; i <= nP; i++) {
-    const p = new THREE.Mesh(new THREE.BoxGeometry(16, 22, width * 0.7), new THREE.MeshLambertMaterial({ color: 0x9aa0a8 }));
-    p.position.set(-len / 2 + (len * i) / nP, 0, 0);
-    g.add(p);
-  }
-  g.position.set((a.x + b.x) / 2, 0, (a.z + b.z) / 2);
-  g.rotation.y = -Math.atan2(b.z - a.z, b.x - a.x);
-  scene.add(g);
-}
-makeBridge(74.8135, 12.9075, 74.8235, 12.8975, 80);   // Kulur bridge over the Gurupura
-makeBridge(74.8435, 12.8520, 74.8420, 12.8340, 80);   // Netravati road bridge at Ullal
-makeBridge(74.8395, 12.8510, 74.8380, 12.8350, 40);   // Netravati railway bridge (Konkan/Southern Rly)
-makeRoad([[74.8434, 12.8691], [74.8556, 12.8859], [74.868, 12.920], [74.8890, 12.9610]], 85);          // city→Kadri→airport
-makeRoad([[74.8434, 12.8691], [74.868, 12.898], [74.8987, 12.9193]], 80);                              // →Pilikula
-makeRoad([[74.8585, 12.857], [74.885, 12.840], [74.905, 12.828], [74.9261, 12.8166]], 80);             // Pumpwell→Konaje
-makeRoad([[74.858, 12.869], [74.885, 12.862], [74.915, 12.858], [74.945, 12.857], [74.968, 12.857]], 110, 0x656c76); // NH-75 → BC Road/Bengaluru
-makeRoad([[74.848, 12.891], [74.878, 12.899], [74.910, 12.901], [74.940, 12.906], [74.968, 12.911]], 100, 0x656c76); // NH-169 → Moodbidri/Shimoga
-makeRoad([[74.8420, 12.8660], [74.8360, 12.8620], [74.8320, 12.8740], [74.8290, 12.8838]], 65);        // Bunder→Sultan Battery
-// local city streets — the everyday grid that stitches the neighbourhoods together
-[
-  [[74.8434, 12.8691], [74.8410, 12.8770], [74.8380, 12.8860], [74.8330, 12.8763]],   // Lighthouse Hill Rd → Lalbagh → Kudroli loop
-  [[74.8434, 12.8691], [74.8400, 12.8640], [74.8360, 12.8620]],                        // Hampankatta → Bunder
-  [[74.8434, 12.8691], [74.8420, 12.8620], [74.8450, 12.8510]],                        // Attavar → Mangaladevi
-  [[74.8434, 12.8691], [74.8480, 12.8830], [74.8530, 12.8840]],                        // KS Rao Rd → Bejai → Kadri
-  [[74.8480, 12.8830], [74.8380, 12.8860]],                                            // Bejai–Lalbagh cross
-  [[74.8600, 12.8646], [74.8500, 12.8630], [74.8420, 12.8620]],                        // Kankanady → Attavar
-  [[74.8556, 12.8859], [74.8562, 12.8891]],                                            // Kadri temple → park
-  [[74.7966, 13.0094], [74.7918, 13.0048]],                                            // NITK → beach
-  [[74.7950, 13.0070], [74.8010, 13.0080]],                                            // Surathkal market → NH-66
-  [[74.8100, 12.9370], [74.8062, 12.9370]],                                            // Panambur beach road
-  [[74.8450, 12.8070], [74.8370, 12.7880]],                                            // Ullal → Someshwara
-  [[74.8730, 12.8470], [74.8585, 12.8560]],                                            // DC office → Pumpwell
-  [[74.7975, 13.0460], [74.8010, 13.0455]],                                            // Uchila link
-  [[74.8000, 13.0870], [74.7990, 13.0930]],                                            // Mulki town street
-].forEach((pts) => makeRoad(pts, 52, 0x8f97a1));
-
-/* ---- surf foam along the shoreline ---- */
-function makeFoam(latA, latB) {
-  const pts = [];
-  for (let lat = latA; lat >= latB; lat -= 0.006) {
-    const z = -(lat - C_LAT) * MPD_Z;
-    pts.push([C_LNG + (coastX(z) - 30) / MPD_X, lat]);
-  }
-  const verts = [], idx = [];
-  const p2 = pts.map(([lng, lat]) => ll(lng, lat));
-  p2.forEach((p, i) => {
-    verts.push(p.x - 45, 1.0, p.z, p.x + 45, 1.0, p.z);
-    if (i < p2.length - 1) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
-  });
-  const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(verts), 3));
-  g.setIndex(idx); g.computeVertexNormals();
-  scene.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75 })));
-}
-makeFoam(13.28, 12.848);  // north of the estuary mouth (incl. Bengre spit)
-makeFoam(12.841, 12.74);  // south of the mouth (Ullal side)
-
-/* ---- NMPT breakwater arms ---- */
-{
-  const bw = (lngA, latA, lngB, latB) => {
-    const a = ll(lngA, latA), b = ll(lngB, latB);
-    const len = Math.hypot(b.x - a.x, b.z - a.z);
-    const m = new THREE.Mesh(new THREE.BoxGeometry(len, 10, 60), new THREE.MeshLambertMaterial({ color: 0x6f6a63 }));
-    m.position.set((a.x + b.x) / 2, 3, (a.z + b.z) / 2);
-    m.rotation.y = -Math.atan2(b.z - a.z, b.x - a.x);
-    scene.add(m);
-  };
-  bw(74.806, 12.9315, 74.795, 12.9255);   // south arm
-  bw(74.805, 12.9410, 74.7945, 12.9360);  // north arm
-}
-
-/* ---- procedural city (instanced buildings) ---- */
-const ZONES = [
-  { lng: 74.843, lat: 12.868, r: 2400, n: 2300, hMin: 14, hMax: 70 },   // city core
-  { lng: 74.855, lat: 12.884, r: 1400, n: 500, hMin: 10, hMax: 32 },    // Kadri/Bejai
-  { lng: 74.796, lat: 13.007, r: 1500, n: 480, hMin: 10, hMax: 28 },    // Surathkal
-  { lng: 74.845, lat: 12.807, r: 1200, n: 320, hMin: 8, hMax: 22 },     // Ullal
-  { lng: 74.815, lat: 12.943, r: 1400, n: 340, hMin: 10, hMax: 26 },    // Panambur/Baikampady
-  { lng: 74.858, lat: 12.862, r: 1300, n: 420, hMin: 10, hMax: 30 },    // Kankanady/Pumpwell
-  { lng: 74.898, lat: 12.809, r: 1000, n: 200, hMin: 8, hMax: 20 },     // Deralakatte
-  { lng: 74.886, lat: 12.968, r: 1000, n: 150, hMin: 8, hMax: 16 },     // Bajpe
-  { lng: 74.802, lat: 13.093, r: 900, n: 220, hMin: 8, hMax: 18 },      // Mulki
-  { lng: 74.760, lat: 13.221, r: 800, n: 170, hMin: 8, hMax: 16 },      // Kaup
-  { lng: 74.782, lat: 13.145, r: 700, n: 120, hMin: 6, hMax: 14 },      // Padubidri
-];
-// coastal-town palette: warm creams, ochres, and washed pastels like real Kudla homes
-const bPalette = [0xfff6e5, 0xf6e2bd, 0xeccf9f, 0xf3d9c0, 0xe8b98a, 0xdfe8f0, 0xd8e6cf, 0xf0cfc2, 0xf7e6a8, 0xe6d2b8].map((c) => new THREE.Color(c));
-const roofPalette = [0xa0522d, 0x9c3a2a, 0xb5651d, 0x8e3b28, 0xaa5a35].map((c) => new THREE.Color(c));
-{
-  const placements = [];
-  let seed = 1;
-  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  ZONES.forEach((zn) => {
-    const c = ll(zn.lng, zn.lat);
-    let placed = 0, tries = 0;
-    while (placed < zn.n && tries < zn.n * 4) {
-      tries++;
-      const a = rnd() * Math.PI * 2, rr = Math.sqrt(rnd()) * zn.r;
-      const x = c.x + Math.cos(a) * rr, z = c.z + Math.sin(a) * rr;
-      const h = heightAt(x, z);
-      if (h < 2.2 || h > 90) continue;
-      if (riverDist(x, z) < 180) continue;
-      let nearLm = false;
-      for (const l of LANDMARKS) if (Math.hypot(x - l.x, z - l.z) < 200) { nearLm = true; break; }
-      if (nearLm) continue;
-      const bh = zn.hMin + rnd() * (zn.hMax - zn.hMin);
-      placements.push({ x, z, y: h, w: 28 + rnd() * 34, d: 28 + rnd() * 34, h: bh, rot: rnd() * Math.PI,
-        col: bPalette[(rnd() * bPalette.length) | 0],
-        // low houses get sloped Mangalore-tile roofs; taller blocks stay flat
-        roof: bh < 26 && rnd() < 0.72 ? roofPalette[(rnd() * roofPalette.length) | 0] : null });
-      placed++;
-    }
-  });
-  const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial(), placements.length);
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s3 = new THREE.Vector3(), p3 = new THREE.Vector3();
-  placements.forEach((p, i) => {
-    e.set(0, p.rot, 0); q.setFromEuler(e);
-    s3.set(p.w, p.h, p.d);
-    p3.set(p.x, p.y + p.h / 2 - 1, p.z);
-    m4.compose(p3, q, s3);
-    inst.setMatrixAt(i, m4);
-    inst.setColorAt(i, p.col);
-  });
-  scene.add(inst);
-  // slanted terracotta tile roofs (4-sided pyramids aligned to each house)
-  const roofed = placements.filter((p) => p.roof);
-  const rInst = new THREE.InstancedMesh(new THREE.ConeGeometry(0.74, 1, 4), new THREE.MeshLambertMaterial(), roofed.length);
-  roofed.forEach((p, i) => {
-    e.set(0, p.rot + Math.PI / 4, 0); q.setFromEuler(e);
-    const rr = Math.hypot(p.w, p.d);
-    s3.set(rr, 6 + (p.h % 5), rr);
-    p3.set(p.x, p.y + p.h - 1 + (6 + (p.h % 5)) / 2, p.z);
-    m4.compose(p3, q, s3);
-    rInst.setMatrixAt(i, m4);
-    rInst.setColorAt(i, p.roof);
-  });
-  scene.add(rInst);
-}
-
-/* ---- sea rocks (Rudra Shile at Someshwara, Bengre tip, lighthouse rocks) ---- */
-{
-  const clusters = [
-    [74.8355, 12.7865, 16, 280],  // Someshwara Rudra Shile
-    [74.8215, 12.8495, 10, 220],  // Bengre spit tip
-    [74.8095, 12.8800, 8, 200],   // Bengre / Tannirbhavi shore rocks
-    [74.7893, 13.0042, 10, 200],  // Surathkal lighthouse rocks
-    [74.7495, 13.2155, 12, 220],  // Kapu lighthouse rocks
-  ];
-  let n = 0; clusters.forEach((c) => (n += c[2]));
-  const inst = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(11, 0), new THREE.MeshLambertMaterial(), n);
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s3 = new THREE.Vector3(), p3 = new THREE.Vector3();
-  const rockCols = [new THREE.Color(0x5a5350), new THREE.Color(0x6b625c), new THREE.Color(0x4a443f)];
-  let k = 0;
-  clusters.forEach(([lng, lat, cnt, spread], ci) => {
-    const c = ll(lng, lat);
-    for (let i = 0; i < cnt; i++) {
-      const a = hash2(ci * 31 + i, 7) * Math.PI * 2, rr = Math.sqrt(hash2(i, ci * 13 + 3)) * spread;
-      const x = c.x + Math.cos(a) * rr, z = c.z + Math.sin(a) * rr;
-      const s = 0.4 + hash2(i * 3, ci) * 1.1;
-      e.set(hash2(i, 1) * 3, hash2(i, 2) * 3, hash2(i, 4) * 3); q.setFromEuler(e);
-      s3.set(s, s * (0.55 + hash2(i, 5) * 0.5), s);
-      p3.set(x, hash2(i, 6) * 4 - 2, z);   // half-submerged in the surf
-      m4.compose(p3, q, s3);
-      inst.setMatrixAt(k, m4);
-      inst.setColorAt(k, rockCols[(i + ci) % 3]);
-      k++;
-    }
-  });
-  scene.add(inst);
-}
-
-/* ---- tetrapod seawall along Bengre beach ---- */
-{
-  const lats = [];
-  for (let lat = 12.8435; lat <= 12.8930; lat += 0.0011) lats.push(lat);
-  const count = lats.length * 2;
-  const inst = new THREE.InstancedMesh(new THREE.TetrahedronGeometry(10, 0), new THREE.MeshLambertMaterial(), count);
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s3 = new THREE.Vector3(), p3 = new THREE.Vector3();
-  const tCols = [new THREE.Color(0xc4c0b6), new THREE.Color(0xb3afa5), new THREE.Color(0xd0ccc2)];
-  let k = 0;
-  lats.forEach((lat, i) => {
-    const z = -(lat - C_LAT) * MPD_Z;
-    for (let row = 0; row < 2; row++) {
-      const x = coastX(z) - 8 - row * 16 + (hash2(i, row) - 0.5) * 10;
-      e.set(hash2(i, row + 2) * 3, hash2(i, row + 4) * 3, hash2(i, row + 6) * 3);
-      q.setFromEuler(e);
-      const s = 0.7 + hash2(i, row + 8) * 0.5;
-      s3.set(s, s, s);
-      p3.set(x, 1.5 + hash2(i, row + 10) * 2, z + (hash2(i, row + 12) - 0.5) * 40);
-      m4.compose(p3, q, s3);
-      inst.setMatrixAt(k, m4);
-      inst.setColorAt(k, tCols[(i + row) % 3]);
-      k++;
-    }
-  });
-  scene.add(inst);
-}
-
-/* ---- coconut palms along the beaches ---- */
-{
-  const beaches = LANDMARKS.filter((l) => l.cat === "beach");
-  const trunks = [], tops = [];
-  beaches.forEach((b, bi) => {
-    for (let i = 0; i < 34; i++) {
-      const a = hash2(bi * 17 + i, 9) * Math.PI * 2, rr = 90 + Math.sqrt(hash2(i, bi * 7 + 1)) * 420;
-      const x = b.x + Math.cos(a) * rr, z = b.z + Math.sin(a) * rr;
-      const h = heightAt(x, z);
-      if (h < 1.0 || h > 7 || x < coastX(z) + 45) continue;     // land only, near the sand
-      const s = 0.8 + hash2(i, bi) * 0.7, lean = (hash2(i * 5, bi) - 0.5) * 0.3;
-      trunks.push({ x, z, y: h, s, lean });
-      tops.push({ x: x + lean * 34 * s, z, y: h + 32 * s, s });
-    }
-  });
-  const tInst = new THREE.InstancedMesh(new THREE.CylinderGeometry(1.5, 2.4, 34, 5), new THREE.MeshLambertMaterial({ color: 0x8d6e63 }), trunks.length);
-  const cInst = new THREE.InstancedMesh(new THREE.SphereGeometry(9, 7, 5), new THREE.MeshLambertMaterial(), tops.length);
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s3 = new THREE.Vector3(), p3 = new THREE.Vector3();
-  const pCols = [new THREE.Color(0x2e7d32), new THREE.Color(0x3c8f3f), new THREE.Color(0x256e2b)];
-  trunks.forEach((t, i) => {
-    e.set(0, 0, t.lean); q.setFromEuler(e);
-    s3.set(t.s, t.s, t.s); p3.set(t.x, t.y + 17 * t.s, t.z);
-    m4.compose(p3, q, s3);
-    tInst.setMatrixAt(i, m4);
-  });
-  const q0 = new THREE.Quaternion();
-  tops.forEach((t, i) => {
-    s3.set(t.s, t.s * 0.45, t.s); p3.set(t.x, t.y, t.z);
-    m4.compose(p3, q0, s3);
-    cInst.setMatrixAt(i, m4);
-    cInst.setColorAt(i, pCols[i % 3]);
-  });
-  scene.add(tInst, cInst);
-}
-
-/* ---- trees ---- */
-{
-  const spots = [];
-  let seed = 7;
-  const rnd = () => (seed = (seed * 48271) % 2147483647) / 2147483647;
-  let tries = 0;
-  while (spots.length < 3600 && tries < 30000) {
-    tries++;
-    const x = TX0 + rnd() * (TX1 - TX0), z = TZ0 + rnd() * (TZ1 - TZ0);
-    const h = heightAt(x, z);
-    if (h < 2.5) continue;
-    if (riverDist(x, z) < 120) continue;
-    const green = h > 20 || fbm(x * 0.0011, z * 0.0011) > 0.5;
-    if (!green) continue;
-    spots.push({ x, z, y: h, s: 0.7 + rnd() * 0.9, g: rnd() });
-  }
-  const inst = new THREE.InstancedMesh(new THREE.ConeGeometry(26, 62, 6), new THREE.MeshLambertMaterial(), spots.length);
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s3 = new THREE.Vector3(), p3 = new THREE.Vector3();
-  const gcols = [new THREE.Color(0x2f6d33), new THREE.Color(0x448840), new THREE.Color(0x255a2a)];
-  spots.forEach((p, i) => {
-    s3.set(p.s, p.s, p.s);
-    p3.set(p.x, p.y + 31 * p.s, p.z);
-    m4.compose(p3, q, s3);
-    inst.setMatrixAt(i, m4);
-    inst.setColorAt(i, gcols[(p.g * 3) | 0]);
-  });
-  scene.add(inst);
-}
-
-/* ---- clouds ---- */
-const clouds = [];
-{
-  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  for (let i = 0; i < 9; i++) {
-    const g = new THREE.Group();
-    const n = 3 + (i % 3);
-    for (let j = 0; j < n; j++) {
-      const s = new THREE.Mesh(new THREE.DodecahedronGeometry(260 + hash2(i, j) * 340, 0), mat);
-      s.position.set(j * 380 - n * 160, hash2(j, i) * 120, hash2(i * 3, j) * 260);
-      s.scale.y = 0.55;
-      g.add(s);
-    }
-    g.position.set(TX0 + hash2(i, 99) * (TX1 - TX0), 2400 + hash2(i, 5) * 900, TZ0 + hash2(i, 42) * (TZ1 - TZ0));
-    scene.add(g);
-    clouds.push(g);
-  }
-}
-
-/* ==================== LANDMARK MODEL BUILDERS ==================== */
+/* ==================== CUSTOM 3D LANDMARK MODELS (Three.js layer) ==================== */
 const ANIMATED = [];
 const M = (c) => new THREE.MeshLambertMaterial({ color: c });
 function box(w, h, d, c, x = 0, y = 0, z = 0) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), M(c)); m.position.set(x, y + h / 2, z); return m; }
@@ -1793,305 +1230,225 @@ const BUILDERS = {
   },
 };
 
-const LM_SCALE = 5.5; // exaggerate landmarks like the reference map
+const LM_SCALE = 2.2; // metres are real here, so a gentle exaggeration is enough
 const modelEntries = [];
-LANDMARKS.forEach((l, i) => {
-  const b = BUILDERS[l.model];
-  if (!b) return;
-  const grp = b();
-  grp.scale.setScalar(LM_SCALE * (l.mScale || 1));
-  grp.position.set(l.x, l.y - 0.5, l.z);
-  grp.rotation.y = ((l.lng * 997) % 1.2) - 0.6;
-  grp.traverse((o) => { o.userData.lmIdx = i; });
-  scene.add(grp);
-  modelEntries.push({ group: grp, landmark: l, idx: i });
-});
+const refMerc = maplibregl.MercatorCoordinate.fromLngLat({ lng: CITY_CENTER[0], lat: CITY_CENTER[1] }, 0);
+const s0 = refMerc.meterInMercatorCoordinateUnits();
 
-/* ---- animated ferry & plane ---- */
-const ferry = new THREE.Group();
-ferry.add(box(14, 3, 5, 0xff8f00), box(5, 3.5, 4, 0xfffde7, 0, 3, 0));
-ferry.scale.setScalar(4);
-scene.add(ferry);
-const FA = ll(74.8225, 12.8840), FB = ll(74.8135, 12.8852); // Sultan Battery ⇄ Tannirbhavi crossing
 
-const plane = new THREE.Group();
-{
-  const fus = cyl(1.6, 1.6, 18, 0xffffff, 0, 0, 0, 8);
-  fus.rotation.z = Math.PI / 2;
-  plane.add(fus, box(2.2, 0.5, 16, 0xe53935, 0, 0, 0), box(1.4, 4, 0.6, 0xe53935, -8, 1, 0));
-  plane.scale.setScalar(6);
-  scene.add(plane);
-}
-const AIRPORT = LANDMARKS.find((l) => l.model === "airport");
+/* ==================== LIVE TRAFFIC: boats, cars & rampaging buses ==================== */
+const NH66_PTS = [
+  [74.762, 13.240], [74.775, 13.190], [74.786, 13.140], [74.797, 13.095],
+  [74.800, 13.090], [74.801, 13.050], [74.796, 13.010], [74.802, 12.975], [74.808, 12.950],
+  [74.810, 12.930], [74.812, 12.915], [74.8145, 12.906], [74.8215, 12.8985], [74.830, 12.9015],
+  [74.8365, 12.8985], [74.845, 12.891], [74.850, 12.880], [74.856, 12.869], [74.8585, 12.857],
+  [74.853, 12.848], [74.8425, 12.8455], [74.8425, 12.836], [74.845, 12.824], [74.8455, 12.807],
+  [74.841, 12.780], [74.841, 12.745],
+];
 
-/* ---- traffic paths ---- */
-function buildPath(ptsLL) {
+const toLocal = (lng, lat) => {
+  const m = maplibregl.MercatorCoordinate.fromLngLat({ lng, lat }, 0);
+  return { x: (m.x - refMerc.x) / s0, z: (m.y - refMerc.y) / s0 };
+};
+function buildPathV(ptsLL) {
   const path = [];
-  const pts = ptsLL.map(([lng, lat]) => ll(lng, lat));
+  const pts = ptsLL.map(([lng, lat]) => toLocal(lng, lat));
   let acc = 0;
   for (let i = 0; i < pts.length - 1; i++) {
     const a = pts[i], b = pts[i + 1];
     const segLen = Math.hypot(b.x - a.x, b.z - a.z);
-    const n = Math.max(2, Math.ceil(segLen / 220));
+    const n = Math.max(2, Math.ceil(segLen / 180));
     for (let j = 0; j < n; j++) {
-      const x = a.x + ((b.x - a.x) * j) / n, z = a.z + ((b.z - a.z) * j) / n;
-      path.push({ x, z, y: Math.max(heightAt(x, z), 1.0) + 2.6, d: acc });
+      path.push({ x: a.x + ((b.x - a.x) * j) / n, z: a.z + ((b.z - a.z) * j) / n, d: acc });
       acc += segLen / n;
     }
   }
   path.total = acc;
   return path;
 }
-const NH_PATH = buildPath(NH66_PTS);
-// city bus route: State Bank → Bejai (KSRTC) → Kadri → airport road
-const CITY_PATH = buildPath([[74.8395, 12.8655], [74.8434, 12.8691], [74.8480, 12.8830], [74.8556, 12.8859], [74.868, 12.920], [74.8890, 12.9610]]);
-// dashed white centreline down NH-66
-{
-  const dashes = [];
-  for (let d = 0; d < NH_PATH.total; d += 520) dashes.push(d);
-  const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xf2f2ee }), dashes.length);
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s3 = new THREE.Vector3(), p3 = new THREE.Vector3();
-  dashes.forEach((d, i) => {
-    let lo = 0, hi = NH_PATH.length - 1;
-    while (lo < hi - 1) { const m = (lo + hi) >> 1; NH_PATH[m].d <= d ? (lo = m) : (hi = m); }
-    const a = NH_PATH[lo], b = NH_PATH[Math.min(lo + 1, NH_PATH.length - 1)];
-    const dx = b.x - a.x, dz = b.z - a.z;
-    e.set(0, Math.atan2(dx, dz), 0); q.setFromEuler(e);
-    s3.set(6, 0.5, 44);
-    p3.set(a.x, a.y + 0.6, a.z);
-    m4.compose(p3, q, s3);
-    inst.setMatrixAt(i, m4);
-  });
-  scene.add(inst);
-}
-const CAR_COLS = [0xd32f2f, 0xfafafa, 0x1565c0, 0xf9a825, 0x37474f, 0x2e7d32, 0xef6c00, 0xfafafa];
-const cars = CAR_COLS.map((c, i) => {
-  const car = new THREE.Group();
-  const isBus = i % 4 === 3;
-  car.add(box(isBus ? 9 : 5, isBus ? 3.4 : 2.2, 2.4, c));
-  if (!isBus) car.add(box(2.6, 1.6, 2.2, c, -0.3, 2.2, 0));
-  car.scale.setScalar(3.4);
-  scene.add(car);
-  return { mesh: car, path: NH_PATH, off: (i / CAR_COLS.length), dir: i % 2 ? 1 : -1, lane: i % 2 ? 22 : -22, speed: isBus ? 220 : 300 + (i % 3) * 60 };
-});
-// the famous Kudla private buses, going full rampage
-function makeBusMesh(c1, c2) {
-  const bus = new THREE.Group();
-  bus.add(box(10, 3.8, 2.5, c1));
-  bus.add(box(10.2, 1.1, 2.55, c2, 0, 1.2, 0));                        // livery stripe
-  bus.add(box(9.4, 1.2, 2.6, 0x263238, 0, 2.5, 0));                     // window band
-  bus.add(box(0.4, 2.6, 2.3, 0x263238, 5, 0.5, 0));                     // windshield
-  bus.scale.setScalar(3.6);
-  scene.add(bus);
-  return bus;
-}
-const BUS_LIVERIES = [[0xc62828, 0xffeb3b], [0xf9a825, 0x2e7d32], [0x1565c0, 0xffffff], [0xef6c00, 0xffffff], [0x6a1b9a, 0xffca28], [0x00897b, 0xfff59d]];
-BUS_LIVERIES.forEach(([c1, c2], i) => {
-  cars.push({ mesh: makeBusMesh(c1, c2), path: NH_PATH, off: i / BUS_LIVERIES.length + 0.07, dir: i % 2 ? 1 : -1, lane: i % 2 ? 32 : -32, speed: 520 + (i % 3) * 90 });
-});
-[[0xc62828, 0xffffff], [0x2e7d32, 0xffeb3b], [0x1565c0, 0xffca28], [0xef6c00, 0x1a237e]].forEach(([c1, c2], i) => {
-  cars.push({ mesh: makeBusMesh(c1, c2), path: CITY_PATH, off: i / 4, dir: i % 2 ? 1 : -1, lane: i % 2 ? 16 : -16, speed: 460 + (i % 2) * 120 });
-});
-function placeOnPath(path, frac, lane) {
+function placeOnPathV(path, frac, lane) {
   const d = frac * path.total;
   let lo = 0, hi = path.length - 1;
   while (lo < hi - 1) { const m = (lo + hi) >> 1; path[m].d <= d ? (lo = m) : (hi = m); }
   const a = path[lo], b = path[Math.min(lo + 1, path.length - 1)];
-  const t = Math.min(1, (d - a.d) / Math.max(1, (b.d - a.d)));
+  const t = Math.min(1, (d - a.d) / Math.max(1, b.d - a.d));
   const dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz) || 1;
-  return {
-    x: a.x + dx * t - (dz / len) * lane, z: a.z + dz * t + (dx / len) * lane,
-    y: a.y + (b.y - a.y) * t, rot: Math.atan2(dx, dz),
-  };
+  return { x: a.x + dx * t - (dz / len) * lane, z: a.z + dz * t + (dx / len) * lane, rot: Math.atan2(dx, dz) };
 }
+const NH_PATH_V = buildPathV(NH66_PTS);
+const CITY_PATH_V = buildPathV([[74.8395, 12.8655], [74.8434, 12.8691], [74.8480, 12.8830], [74.8556, 12.8859], [74.868, 12.920], [74.8890, 12.9610]]);
 
-/* ---- ships & fishing boats at sea ---- */
-const ships = [];
-[[-8600, -9000, 0x37474f, 14], [-9600, 2000, 0x5d4037, 11]].forEach(([x, z, c, sc]) => {
-  const s = new THREE.Group();
-  s.add(box(30, 4, 8, c), box(5, 6, 7, 0xeceff1, -9, 4, 0));
-  for (let i = 0; i < 3; i++) s.add(box(5, 2.2, 6, [0xe53935, 0x43a047, 0xfb8c00][i], 2 + i * 5.6, 4, 0));
-  s.scale.setScalar(sc / 3);
-  s.position.set(x, 0.5, z);
-  scene.add(s);
-  ships.push(s);
-});
-// anchored fishing boats in the estuary
-[[74.826, 12.856, 0.4], [74.8245, 12.8665, -0.8], [74.827, 12.8505, 1.7]].forEach(([lng, lat, ry]) => {
-  const p = ll(lng, lat);
-  const b = new THREE.Group();
-  b.add(box(10, 2.2, 3.4, 0x1e88e5), cone(1.6, 2.6, 0x1e88e5, 5.8, 0, 0, 4, Math.PI / 4), box(2.6, 2.2, 2.6, 0xfff3e0, -2, 2.2, 0));
-  b.scale.setScalar(2.6);
-  b.position.set(p.x, 0.6, p.z);
-  b.rotation.y = ry;
-  scene.add(b);
-});
+const vehicles = [];
+let ferryV = null, shipsV = [];
+const FA_V = toLocal(74.8225, 12.8840), FB_V = toLocal(74.8135, 12.8852);
 
-/* ---- Panambur watersports: speedboat + parasail, jetskis, banana boat ---- */
-const WS_C = ll(74.8005, 12.9375);
-const speedboat = new THREE.Group();
-speedboat.add(box(11, 2.2, 4, 0xfafafa), cone(2, 3.5, 0xfafafa, 6.6, 0, 0, 4, Math.PI / 4), box(3, 2, 3.4, 0x1a6bb5, -2, 2.2, 0));
-speedboat.scale.setScalar(3.2);
-scene.add(speedboat);
-const chute = new THREE.Group();
-{
-  const canopy = new THREE.Mesh(new THREE.SphereGeometry(6, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), M(0xef5350));
-  canopy.scale.y = 0.6; chute.add(canopy);
-  chute.add(box(0.7, 2.2, 0.7, 0x37474f, 0, -2.4, 0));   // the tiny brave tourist
-  chute.scale.setScalar(3.2);
-  scene.add(chute);
+function busMeshV(c1, c2) {
+  const bus = new THREE.Group();
+  bus.add(box(10, 3.8, 2.5, c1));
+  bus.add(box(10.2, 1.1, 2.55, c2, 0, 1.2, 0));
+  bus.add(box(9.4, 1.2, 2.6, 0x263238, 0, 2.5, 0));
+  bus.add(box(0.4, 2.6, 2.3, 0x263238, 5, 0.5, 0));
+  bus.scale.setScalar(2.4);
+  return bus;
 }
-const jetskis = [0xffca28, 0x26c6da].map((c, i) => {
-  const j = new THREE.Group();
-  j.add(box(5, 1.6, 2, c), box(1.4, 1.8, 1.4, 0x37474f, -0.6, 1.6, 0));
-  j.scale.setScalar(2.6);
-  scene.add(j);
-  return j;
-});
-const banana = new THREE.Group();
-{
-  const b = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 14, 8), M(0xffee58));
-  b.rotation.z = Math.PI / 2; b.scale.y = 0.9; banana.add(b);
-  banana.scale.setScalar(2.6);
-  banana.position.set(WS_C.x + 180, 1.2, WS_C.z + 260);
-  banana.rotation.y = 0.7;
-  scene.add(banana);
-}
-
-/* ==================== LABELS / PICKING / UI ==================== */
-const labelsEl = document.getElementById("labels");
-const labelDivs = LANDMARKS.map((l, i) => {
-  const d = document.createElement("div");
-  d.className = "pill";
-  d.innerHTML = `<span class="ic">${CATEGORIES[l.cat].icon}</span>${l.name}`;
-  d.style.borderLeft = `4px solid ${CATEGORIES[l.cat].color}`;
-  d.onclick = () => selectLandmark(i, true);
-  labelsEl.appendChild(d);
-  return d;
-});
-
-// neighbourhood / area names, rendered as subtle ground captions
-const AREAS = [
-  ["HAMPANKATTA", 74.8434, 12.8691], ["BEJAI", 74.8480, 12.8830], ["KADRI", 74.8530, 12.8840],
-  ["KODIALBAIL", 74.8400, 12.8770], ["BUNDER", 74.8360, 12.8620], ["LALBAGH", 74.8380, 12.8860],
-  ["MANNAGUDDA", 74.8370, 12.8820], ["KOTTARA", 74.8380, 12.8985], ["SURATHKAL", 74.7950, 13.0070],
-  ["ULLAL", 74.8450, 12.8070], ["BENGRE", 74.8200, 12.8580], ["KULUR", 74.8220, 12.9060],
-  ["PANAMBUR", 74.8080, 12.9370], ["BAIKAMPADY", 74.8140, 12.9450], ["BAJPE", 74.8840, 12.9750],
-  ["KONAJE", 74.9283, 12.8202], ["PUMPWELL", 74.8585, 12.8560], ["KANKANADY", 74.8600, 12.8646],
-  ["ATTAVAR", 74.8420, 12.8620], ["DERALAKATTE", 74.8982, 12.8090], ["ARABIAN SEA", 74.7500, 12.9200],
-  ["MUKKA", 74.7930, 13.0300], ["UCHILA", 74.7990, 13.0480], ["MULKI", 74.8020, 13.0950],
-  ["PADUBIDRI", 74.7800, 13.1450], ["KAUP", 74.7620, 13.2230],
-  ["NH-66", 74.8080, 12.9650], ["NH-66", 74.8440, 12.8200], ["NH-66", 74.7900, 13.1200],
-  ["NH-75 · BENGALURU", 74.9350, 12.8545], ["NH-169 · MOODBIDRI", 74.9300, 12.9075],
-  ["NETRAVATI RIVER", 74.8950, 12.8630], ["GURUPURA RIVER", 74.8800, 12.9180], ["NANDINI RIVER", 74.8500, 13.0250],
-].map(([name, lng, lat]) => { const p = ll(lng, lat); return { name, x: p.x, z: p.z, y: Math.max(rawHeight(p.x, p.z), 0) + 20 }; });
-const areaDivs = AREAS.map((a) => {
-  const d = document.createElement("div");
-  d.className = "area";
-  d.textContent = a.name;
-  labelsEl.appendChild(d);
-  return d;
-});
-
-const v3 = new THREE.Vector3();
-function updateLabels() {
-  const camD = camera.position.distanceTo(controls.target);
-  AREAS.forEach((a, i) => {
-    const d = areaDivs[i];
-    if (camD > 30000) { d.style.display = "none"; return; }
-    v3.set(a.x, a.y, a.z).project(camera);
-    if (v3.z > 1 || Math.abs(v3.x) > 1.05 || Math.abs(v3.y) > 1.05) { d.style.display = "none"; return; }
-    d.style.display = "block";
-    d.style.left = ((v3.x + 1) / 2) * innerWidth + "px";
-    d.style.top = ((-v3.y + 1) / 2) * innerHeight + "px";
-    d.style.opacity = Math.min(1, Math.max(0.35, 1.4 - camD / 25000));
+function buildVehicles(scene) {
+  // cars on NH-66
+  [0xd32f2f, 0xfafafa, 0x1565c0, 0xf9a825, 0x37474f, 0x2e7d32].forEach((c, i) => {
+    const car = new THREE.Group();
+    car.add(box(5, 2.2, 2.4, c), box(2.6, 1.6, 2.2, c, -0.3, 2.2, 0));
+    car.scale.setScalar(2.2);
+    scene.add(car);
+    vehicles.push({ mesh: car, path: NH_PATH_V, off: i / 6, dir: i % 2 ? 1 : -1, lane: i % 2 ? 9 : -9, speed: 240 + (i % 3) * 50 });
   });
-  updatePills();
-}
-function updatePills() {
-  const w = innerWidth, h = innerHeight;
-  // project all visible labels, then greedily drop overlapping ones (closest first,
-  // selected landmark always wins) so the screen never gets cramped
-  const cand = [];
-  LANDMARKS.forEach((l, i) => {
-    if (!visibleSet.has(i)) { labelDivs[i].style.display = "none"; return; }
-    v3.set(l.x, l.y + 90, l.z).project(camera);
-    if (v3.z > 1 || v3.x < -1.1 || v3.x > 1.1 || v3.y < -1.1 || v3.y > 1.1) { labelDivs[i].style.display = "none"; return; }
-    cand.push({ i, sx: ((v3.x + 1) / 2) * w, sy: ((-v3.y + 1) / 2) * h, z: v3.z, pw: l.name.length * 6.6 + 34 });
+  // rampaging private buses on NH-66
+  [[0xc62828, 0xffeb3b], [0xf9a825, 0x2e7d32], [0x1565c0, 0xffffff], [0xef6c00, 0xffffff], [0x6a1b9a, 0xffca28]].forEach(([c1, c2], i) => {
+    const bus = busMeshV(c1, c2);
+    scene.add(bus);
+    vehicles.push({ mesh: bus, path: NH_PATH_V, off: i / 5 + 0.09, dir: i % 2 ? 1 : -1, lane: i % 2 ? 13 : -13, speed: 430 + (i % 3) * 80 });
   });
-  cand.sort((a, b) => (a.i === selectedIdx ? -1 : b.i === selectedIdx ? 1 : a.z - b.z));
-  const placed = [];
-  for (const c of cand) {
-    const x0 = c.sx - c.pw / 2, x1 = c.sx + c.pw / 2, y0 = c.sy - 36, y1 = c.sy;
-    const clash = placed.some((p) => x0 < p.x1 + 4 && x1 > p.x0 - 4 && y0 < p.y1 + 4 && y1 > p.y0 - 4);
-    const d = labelDivs[c.i];
-    if (clash) { d.style.display = "none"; continue; }
-    placed.push({ x0, x1, y0, y1 });
-    d.style.display = "flex";
-    d.style.left = c.sx + "px";
-    d.style.top = c.sy + "px";
-    d.style.zIndex = Math.round((1 - c.z) * 10000);
+  // city-route buses: State Bank -> Bejai -> Kadri -> airport
+  [[0xc62828, 0xffffff], [0x2e7d32, 0xffeb3b], [0x1565c0, 0xffca28]].forEach(([c1, c2], i) => {
+    const bus = busMeshV(c1, c2);
+    scene.add(bus);
+    vehicles.push({ mesh: bus, path: CITY_PATH_V, off: i / 3, dir: i % 2 ? 1 : -1, lane: i % 2 ? 8 : -8, speed: 360 + i * 60 });
+  });
+  // Sultan Battery <-> Tannirbhavi ferry
+  ferryV = new THREE.Group();
+  ferryV.add(box(14, 3, 5, 0xff8f00), box(5, 3.5, 4, 0xfffde7, 0, 3, 0));
+  ferryV.scale.setScalar(2.6);
+  scene.add(ferryV);
+  // cargo ships steaming along the coast toward NMPT
+  [[74.775, 13.02, 0x37474f], [74.760, 12.80, 0x5d4037]].forEach(([lng, lat, c]) => {
+    const sPos = toLocal(lng, lat);
+    const ship = new THREE.Group();
+    ship.add(box(30, 4, 8, c), box(5, 6, 7, 0xeceff1, -9, 4, 0));
+    for (let i = 0; i < 3; i++) ship.add(box(5, 2.2, 6, [0xe53935, 0x43a047, 0xfb8c00][i], 2 + i * 5.6, 4, 0));
+    ship.scale.setScalar(3.4);
+    ship.position.set(sPos.x, 0, sPos.z);
+    scene.add(ship);
+    shipsV.push(ship);
+  });
+}
+function animateVehicles(t) {
+  vehicles.forEach((v) => {
+    const frac = ((v.off + v.dir * t * v.speed / v.path.total) % 1 + 1) % 1;
+    const pOn = placeOnPathV(v.path, frac, v.lane);
+    v.mesh.position.set(pOn.x, 0, pOn.z);
+    v.mesh.rotation.y = pOn.rot + (v.dir > 0 ? 0 : Math.PI) + Math.PI / 2;
+  });
+  if (ferryV) {
+    const ft = (Math.sin(t * 0.15) + 1) / 2;
+    ferryV.position.set(FA_V.x + (FB_V.x - FA_V.x) * ft, 0, FA_V.z + (FB_V.z - FA_V.z) * ft);
+    ferryV.rotation.y = Math.atan2(FB_V.x - FA_V.x, FB_V.z - FA_V.z) + (Math.cos(t * 0.15) > 0 ? 0 : Math.PI);
   }
+  shipsV.forEach((sh, i) => {
+    sh.position.z += (i ? -1 : 1) * 1.4;
+    if (sh.position.z > 24000) sh.position.z = -34000;
+    if (sh.position.z < -34000) sh.position.z = 24000;
+  });
 }
 
-/* ---- selection card ---- */
-const card = document.getElementById("card");
-let selectedIdx = null;
-function selectLandmark(i, fly) {
-  selectedIdx = i;
-  const l = LANDMARKS[i], c = CATEGORIES[l.cat];
-  card.querySelector(".c-title").textContent = l.name;
-  const cc = card.querySelector(".c-cat"); cc.textContent = c.label; cc.style.color = c.color;
-  card.querySelector(".c-desc").textContent = l.desc;
-  const cf = card.querySelector(".c-fact"); cf.innerHTML = "💡 " + l.fact; cf.style.display = l.fact ? "" : "none";
-  updateCardBtn();
-  card.style.display = "block";
-  if (fly) flyToLandmark(i);
-}
-function updateCardBtn() {
-  const btn = card.querySelector(".c-add");
-  const inTrip = trip.includes(selectedIdx);
-  btn.textContent = inTrip ? "✓ In your trip" : "＋ Add to trip";
-  btn.disabled = inTrip;
-  btn.onclick = () => { if (!trip.includes(selectedIdx)) { trip.push(selectedIdx); renderTrip(); updateCardBtn(); } };
-}
-window.closeCard = () => { card.style.display = "none"; selectedIdx = null; };
+const modelLayer = {
+  id: "landmark-models",
+  type: "custom",
+  renderingMode: "3d",
+  onAdd(mapp, gl) {
+    this.camera = new THREE.Camera();
+    this.scene = new THREE.Scene();
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const sun = new THREE.DirectionalLight(0xfff2d9, 0.9);
+    sun.position.set(120, 200, 80);
+    this.scene.add(sun);
+    LANDMARKS.forEach((l, i) => {
+      const builder = BUILDERS[l.model];
+      if (!builder) return;
+      const grp = builder();
+      grp.scale.setScalar(LM_SCALE * (l.mScale || 1));
+      const m = maplibregl.MercatorCoordinate.fromLngLat({ lng: l.lng, lat: l.lat }, 0);
+      grp.position.set((m.x - refMerc.x) / s0, 0, (m.y - refMerc.y) / s0);
+      grp.rotation.y = ((l.lng * 997) % 1.2) - 0.6;
+      this.scene.add(grp);
+      modelEntries.push({ group: grp, landmark: l, idx: i });
+    });
+    buildVehicles(this.scene);
+    this.renderer = new THREE.WebGLRenderer({ canvas: mapp.getCanvas(), context: gl, antialias: true });
+    this.renderer.autoClear = false;
+  },
+  render(gl, matrix) {
+    const t = performance.now() / 1000;
+    ANIMATED.forEach((o) => {
+      if (o.userData.wheel) {
+        o.rotation.z = t * 0.35;
+        o.children.forEach((ch) => { if (ch.userData.cab) ch.rotation.z = -o.rotation.z; });
+      }
+      if (o.userData.kite) {
+        o.position.y = o.userData.kite.baseY + Math.sin(t * 1.3 + o.userData.kite.phase) * 3;
+        o.rotation.z = Math.sin(t * 0.9 + o.userData.kite.phase) * 0.35;
+      }
+      if (o.userData.flame) o.scale.y = 1 + Math.sin(t * 7) * 0.25;
+    });
+    animateVehicles(t);
+    const m = new THREE.Matrix4().fromArray(matrix);
+    const l = new THREE.Matrix4()
+      .makeTranslation(refMerc.x, refMerc.y, refMerc.z)
+      .scale(new THREE.Vector3(s0, -s0, s0))
+      .multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2));
+    this.camera.projectionMatrix = m.multiply(l);
+    this.renderer.resetState();
+    this.renderer.render(this.scene, this.camera);
+    map.triggerRepaint();
+  },
+};
 
-/* ---- camera fly ---- */
-let flight = null;
-function flyToLandmark(i) {
-  const l = LANDMARKS[i];
-  const tgt = new THREE.Vector3(l.x, l.y + 30, l.z);
-  const dir = camera.position.clone().sub(controls.target).normalize();
-  if (dir.y < 0.25) dir.y = 0.25;
-  dir.normalize();
-  const pos = tgt.clone().add(dir.multiplyScalar(1400)).add(new THREE.Vector3(0, 420, 0));
-  flight = { t: 0, p0: camera.position.clone(), p1: pos, t0: controls.target.clone(), t1: tgt };
-}
-function flyHome() {
-  flight = { t: 0, p0: camera.position.clone(), p1: HOME_POS.clone(), t0: controls.target.clone(), t1: HOME_TGT.clone() };
-}
-canvas.addEventListener("pointerdown", () => { flight = null; stopTour(); });
 
-/* ---- raycast click on models ---- */
-const raycaster = new THREE.Raycaster();
-const mouse = new THREE.Vector2();
-let downAt = null;
-canvas.addEventListener("pointerdown", (e) => { downAt = [e.clientX, e.clientY]; });
-canvas.addEventListener("pointerup", (e) => {
-  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;
-  mouse.x = (e.clientX / innerWidth) * 2 - 1;
-  mouse.y = -(e.clientY / innerHeight) * 2 + 1;
-  raycaster.setFromCamera(mouse, camera);
-  const hits = raycaster.intersectObjects(modelEntries.map((m) => m.group), true);
-  if (hits.length && hits[0].object.userData.lmIdx !== undefined) selectLandmark(hits[0].object.userData.lmIdx, false);
+/* ==================== MARKERS & POPUPS ==================== */
+const trip = [];
+const markers = [];
+
+function popupHTML(l, idx) {
+  const c = CATEGORIES[l.cat];
+  const inTrip = trip.includes(idx);
+  return `<div class="p-title">${l.name}</div>
+    <div class="p-cat" style="color:${c.color}">${c.icon} ${c.label}</div>
+    <div class="p-desc">${l.desc}</div>
+    ${l.fact ? `<div class="p-fact">💡 ${l.fact}</div>` : ""}
+    <button class="p-add" onclick="addToTrip(${idx})" ${inTrip ? "disabled" : ""}>${inTrip ? "✓ In your trip" : "＋ Add to trip"}</button>`;
+}
+
+LANDMARKS.forEach((l, i) => {
+  const el = document.createElement("div");
+  el.className = "marker";
+  el.style.background = CATEGORIES[l.cat].color;
+  const popup = new maplibregl.Popup({ offset: 16 });
+  popup.on("open", () => popup.setHTML(popupHTML(l, i)));
+  const marker = new maplibregl.Marker({ element: el })
+    .setLngLat([l.lng, l.lat])
+    .setPopup(popup)
+    .addTo(map);
+  markers.push(marker);
 });
 
-/* ---- sidebar: filters, search, list ---- */
-const trip = [];
+window.addToTrip = (idx) => {
+  if (!trip.includes(idx)) trip.push(idx);
+  renderTrip();
+  const p = markers[idx].getPopup();
+  if (p.isOpen()) p.setHTML(popupHTML(LANDMARKS[idx], idx));
+};
+
+function closeAllPopups() {
+  markers.forEach((m) => m.getPopup().isOpen() && m.togglePopup());
+}
+function flyToLandmark(idx, open = true) {
+  const l = LANDMARKS[idx];
+  map.flyTo({ center: [l.lng, l.lat], zoom: 16.2, pitch: 62, bearing: ((idx * 53) % 90) - 45, duration: 2400, essential: true });
+  if (open) { closeAllPopups(); setTimeout(() => markers[idx].togglePopup(), 2300); }
+}
+
+/* ==================== SIDEBAR ==================== */
 const activeCats = new Set(Object.keys(CATEGORIES));
 let searchTerm = "";
-const visibleSet = new Set(LANDMARKS.map((_, i) => i));
+const visible = () => LANDMARKS.map((l, i) => i).filter((i) =>
+  activeCats.has(LANDMARKS[i].cat) && LANDMARKS[i].name.toLowerCase().includes(searchTerm));
 
 const filtersEl = document.getElementById("filters");
 Object.entries(CATEGORIES).forEach(([key, c]) => {
@@ -2110,41 +1467,35 @@ Object.entries(CATEGORIES).forEach(([key, c]) => {
 const listEl = document.getElementById("list");
 function refresh() {
   listEl.innerHTML = "";
-  visibleSet.clear();
+  const vis = new Set(visible());
+  modelEntries.forEach((e) => { e.group.visible = vis.has(e.idx); });
+  map.triggerRepaint && map.triggerRepaint();
   LANDMARKS.forEach((l, i) => {
-    const vis = activeCats.has(l.cat) && l.name.toLowerCase().includes(searchTerm);
-    const entry = modelEntries.find((m) => m.idx === i);
-    if (entry) entry.group.visible = vis;
-    if (!vis) return;
-    visibleSet.add(i);
+    markers[i].getElement().style.display = vis.has(i) ? "" : "none";
+    if (!vis.has(i)) return;
     const item = document.createElement("div");
     item.className = "item";
     const inTrip = trip.includes(i);
     item.innerHTML = `<span class="dot" style="background:${CATEGORIES[l.cat].color}"></span>
       <span style="flex:1"><div class="name">${l.name}</div><div class="cat">${CATEGORIES[l.cat].label}</div></span>
-      <button class="add${inTrip ? " in" : ""}" title="Add to trip">${inTrip ? "✓" : "＋"}</button>`;
-    item.onclick = () => selectLandmark(i, true);
+      <button class="add${inTrip ? " in" : ""}">${inTrip ? "✓" : "＋"}</button>`;
+    item.onclick = () => flyToLandmark(i);
     const addBtn = item.querySelector(".add");
-    addBtn.onclick = (e) => {
-      e.stopPropagation();
-      if (!trip.includes(i)) { trip.push(i); renderTrip(); if (selectedIdx === i) updateCardBtn(); }
-      addBtn.textContent = "✓";
-      addBtn.classList.add("in");
-    };
+    addBtn.onclick = (e) => { e.stopPropagation(); window.addToTrip(i); };
     listEl.appendChild(item);
   });
 }
-refresh();
 document.getElementById("search").addEventListener("input", (e) => { searchTerm = e.target.value.toLowerCase(); refresh(); });
 
-/* ---- trip planner ---- */
+/* ==================== TRIP PLANNER + TOUR BAR ==================== */
 function renderTrip() {
   const listT = document.getElementById("tripList");
   const btns = document.getElementById("tripBtns");
   document.getElementById("tripCount").textContent = trip.length ? `(${trip.length})` : "";
   if (!trip.length) {
-    listT.innerHTML = '<div class="empty">Click "Add to trip" on any landmark to plan your Mangalore itinerary.</div>';
+    listT.innerHTML = '<div class="empty">Click "＋" or "Add to trip" on any landmark to plan your itinerary.</div>';
     btns.style.display = "none";
+    refresh();
     return;
   }
   btns.style.display = "flex";
@@ -2155,21 +1506,20 @@ function renderTrip() {
     row.className = "trip-item";
     row.innerHTML = `<span style="width:8px;height:8px;border-radius:50%;background:${CATEGORIES[l.cat].color}"></span>
       <span class="n">${order + 1}. ${l.name}</span><span class="x">✕</span>`;
-    row.querySelector(".n").onclick = () => selectLandmark(idx, true);
-    row.querySelector(".x").onclick = () => { trip.splice(order, 1); renderTrip(); if (selectedIdx !== null) updateCardBtn(); };
+    row.querySelector(".n").onclick = () => flyToLandmark(idx);
+    row.querySelector(".x").onclick = () => { trip.splice(order, 1); renderTrip(); };
     listT.appendChild(row);
   });
-  refresh(); // keep the ＋/✓ buttons in the landmark list in sync
+  refresh();
 }
-document.getElementById("btnTripClear").onclick = () => { trip.length = 0; renderTrip(); if (selectedIdx !== null) updateCardBtn(); };
+document.getElementById("btnTripClear").onclick = () => { trip.length = 0; renderTrip(); };
 
-// trip tour: manual, story-style — you press Next to move between your stops
 let tripActive = false, tripPos = 0;
-const tripTourBtn = document.getElementById("btnTripTour");
 const tripBar = document.getElementById("tripbar");
+const tripTourBtn = document.getElementById("btnTripTour");
 function tripGo(i) {
   tripPos = Math.max(0, Math.min(trip.length - 1, i));
-  selectLandmark(trip[tripPos], true);
+  flyToLandmark(trip[tripPos]);
   tripBar.querySelector(".t-label").textContent = `Stop ${tripPos + 1} of ${trip.length} · ${LANDMARKS[trip[tripPos]].name}`;
   tripBar.querySelector(".t-prev").style.visibility = tripPos ? "visible" : "hidden";
   tripBar.querySelector(".t-next").textContent = tripPos === trip.length - 1 ? "Finish ✓" : "Next ▶";
@@ -2191,40 +1541,27 @@ tripTourBtn.onclick = () => {
 tripBar.querySelector(".t-next").onclick = () => (tripPos >= trip.length - 1 ? stopTripTour() : tripGo(tripPos + 1));
 tripBar.querySelector(".t-prev").onclick = () => tripGo(tripPos - 1);
 tripBar.querySelector(".t-end").onclick = stopTripTour;
-addEventListener("keydown", (e) => {
-  if (!tripActive) return;
-  if (e.key === "ArrowRight" || e.key === "Enter") tripBar.querySelector(".t-next").click();
-  if (e.key === "ArrowLeft") tripBar.querySelector(".t-prev").click();
-  if (e.key === "Escape") stopTripTour();
-});
-// headless test hook: ?triptest=1 loads a trip and starts the tour
-if (new URLSearchParams(location.search).get("triptest")) {
-  setTimeout(() => {
-    trip.push(1, 12, 22);
-    renderTrip();
-    document.getElementById("btnTripTour").click();
-  }, 600);
-}
 
-/* ---- fly tour ---- */
+/* ==================== FLY TOUR & VIEW CONTROLS ==================== */
 let tourActive = false, tourIdx = 0, tourTimer = null;
 const tourBtn = document.getElementById("btnTour");
 function stopTour() { if (!tourActive) return; tourActive = false; clearTimeout(tourTimer); tourBtn.textContent = "✈ Fly Tour"; }
 function tourStep() {
   if (!tourActive) return;
-  const vis = [...visibleSet];
+  const vis = visible();
   if (!vis.length) return stopTour();
-  selectLandmark(vis[tourIdx % vis.length], true);
+  flyToLandmark(vis[tourIdx % vis.length]);
   tourIdx++;
   tourTimer = setTimeout(tourStep, 7000);
 }
-tourBtn.onclick = () => {
-  if (tourActive) return stopTour();
-  tourActive = true; tourBtn.textContent = "■ Stop Tour"; tourStep();
-};
-document.getElementById("btnHome").onclick = () => { stopTour(); flyHome(); };
+tourBtn.onclick = () => { if (tourActive) return stopTour(); tourActive = true; tourBtn.textContent = "■ Stop Tour"; tourStep(); };
+map.on("mousedown", () => { stopTour(); });
 
-/* ---- Story Mode: "A Day in Kudla" ---- */
+document.getElementById("btn3d").onclick = () => map.easeTo({ pitch: 62, duration: 1000 });
+document.getElementById("btnTop").onclick = () => map.easeTo({ pitch: 0, bearing: 0, duration: 1000 });
+document.getElementById("btnHome").onclick = () => { stopTour(); map.flyTo({ center: CITY_CENTER, zoom: 13.2, pitch: 60, bearing: -15, duration: 1800 }); };
+
+/* ==================== STORY MODE ==================== */
 const STORY = [
   { at: "Kadri Manjunath Temple", title: "Dawn on Kadri Hill", dist: 900,
     text: "The day begins before sunrise, with temple bells rolling down Kadri hill. Pilgrims dip in the nine spring-fed ponds while the copper roofs catch the first light — this temple has watched over Kudla for a thousand years." },
@@ -2255,24 +1592,22 @@ const STORY = [
   { at: "Someshwara Beach, Ullal", title: "Sunset on the Rudra Rocks", dist: 1000,
     text: "End at Someshwara, where Rani Abbakka's temple watches waves shatter on the Rudra Shile. The sun drops into the Arabian Sea, the rocks turn gold, and Kudla's day folds shut. Naale kaanuva — see you tomorrow." },
 ];
+
 const storyEl = document.getElementById("story");
 const sDots = storyEl.querySelector(".s-dots");
-STORY.forEach((_, i) => {
-  const d = document.createElement("span");
-  d.onclick = () => storyChapter(i);
-  sDots.appendChild(d);
-});
-let storyIdx = -1, storyOn = false;
+STORY.forEach((_, i) => { const d = document.createElement("span"); d.onclick = () => storyChapter(i); sDots.appendChild(d); });
+let storyIdx = -1, storyOn = false, storySpin = null;
 function storyChapter(i) {
   storyIdx = i;
   const ch = STORY[i];
   const li = LANDMARKS.findIndex((l) => l.name === ch.at);
+  clearInterval(storySpin);
   if (li >= 0) {
     const l = LANDMARKS[li];
-    const tgt = new THREE.Vector3(l.x, l.y + 30, l.z);
-    const ang = (i * 1.1) % (Math.PI * 2);
-    const pos = tgt.clone().add(new THREE.Vector3(Math.cos(ang) * ch.dist, ch.dist * 0.55, Math.sin(ang) * ch.dist));
-    flight = { t: 0, p0: camera.position.clone(), p1: pos, t0: controls.target.clone(), t1: tgt };
+    closeAllPopups();
+    map.flyTo({ center: [l.lng, l.lat], zoom: 16.4, pitch: 64, bearing: (i * 63) % 360 - 180, duration: 3200, essential: true });
+    // slow cinematic rotation once we arrive
+    setTimeout(() => { if (storyOn && storyIdx === i) storySpin = setInterval(() => map.rotateTo(map.getBearing() + 0.06, { duration: 50 }), 50); }, 3300);
   }
   storyEl.classList.remove("show");
   setTimeout(() => {
@@ -2287,123 +1622,44 @@ function storyChapter(i) {
 }
 function startStory() {
   storyOn = true;
-  closeCard();
-  stopTour();
+  stopTour(); stopTripTour();
   sidebar.classList.add("hidden");
   toggleBtn.classList.add("shifted");
-  controls.autoRotate = true;
-  controls.autoRotateSpeed = 0.45;
   storyEl.classList.add("on");
   storyChapter(0);
 }
 function exitStory() {
   storyOn = false;
-  controls.autoRotate = false;
+  clearInterval(storySpin);
   storyEl.classList.remove("show");
   setTimeout(() => storyEl.classList.remove("on"), 400);
   sidebar.classList.remove("hidden");
   toggleBtn.classList.remove("shifted");
-  flyHome();
+  map.flyTo({ center: CITY_CENTER, zoom: 13.2, pitch: 60, bearing: -15, duration: 2200 });
 }
 document.getElementById("btnStory").onclick = () => (storyOn ? exitStory() : startStory());
 storyEl.querySelector(".s-next").onclick = () => (storyIdx >= STORY.length - 1 ? exitStory() : storyChapter(storyIdx + 1));
 storyEl.querySelector(".s-prev").onclick = () => storyIdx > 0 && storyChapter(storyIdx - 1);
 storyEl.querySelector(".s-exit").onclick = exitStory;
+map.on("mousedown", () => clearInterval(storySpin));
 addEventListener("keydown", (e) => {
-  if (!storyOn) return;
-  if (e.key === "ArrowRight" || e.key === "Enter") storyEl.querySelector(".s-next").click();
-  if (e.key === "ArrowLeft") storyEl.querySelector(".s-prev").click();
-  if (e.key === "Escape") exitStory();
+  if (storyOn) {
+    if (e.key === "ArrowRight" || e.key === "Enter") storyEl.querySelector(".s-next").click();
+    if (e.key === "ArrowLeft") storyEl.querySelector(".s-prev").click();
+    if (e.key === "Escape") exitStory();
+  } else if (tripActive) {
+    if (e.key === "ArrowRight" || e.key === "Enter") tripBar.querySelector(".t-next").click();
+    if (e.key === "ArrowLeft") tripBar.querySelector(".t-prev").click();
+    if (e.key === "Escape") stopTripTour();
+  }
 });
 
-/* ---- sidebar toggle ---- */
+/* ==================== SIDEBAR TOGGLE ==================== */
 const sidebar = document.getElementById("sidebar");
 const toggleBtn = document.getElementById("toggle");
 toggleBtn.onclick = () => { sidebar.classList.toggle("hidden"); toggleBtn.classList.toggle("shifted"); };
 
-/* ============================ LOOP ============================ */
-addEventListener("resize", () => {
-  camera.aspect = innerWidth / innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-});
-
-const clock = new THREE.Clock();
-function animate() {
-  requestAnimationFrame(animate);
-  const t = clock.getElapsedTime();
-
-  if (flight) {
-    flight.t += 0.012;
-    const k = flight.t >= 1 ? 1 : 1 - Math.pow(1 - flight.t, 3);
-    camera.position.lerpVectors(flight.p0, flight.p1, k);
-    controls.target.lerpVectors(flight.t0, flight.t1, k);
-    if (flight.t >= 1) flight = null;
-  }
-  controls.update();
-
-  ANIMATED.forEach((o) => {
-    if (o.userData.wheel) {
-      o.rotation.z = t * 0.35;
-      o.children.forEach((ch) => { if (ch.userData.cab) ch.rotation.z = -o.rotation.z; });
-    }
-    if (o.userData.kite) {
-      o.position.y = o.userData.kite.baseY + Math.sin(t * 1.3 + o.userData.kite.phase) * 3;
-      o.rotation.z = Math.sin(t * 0.9 + o.userData.kite.phase) * 0.35;
-    }
-    if (o.userData.flame) o.scale.y = 1 + Math.sin(t * 7) * 0.25;
-  });
-
-  // ferry back & forth on the Gurupura
-  const ft = (Math.sin(t * 0.12) + 1) / 2;
-  ferry.position.set(FA.x + (FB.x - FA.x) * ft, 1.5, FA.z + (FB.z - FA.z) * ft);
-  ferry.rotation.y = Math.atan2(FB.x - FA.x, FB.z - FA.z) + (Math.cos(t * 0.12) > 0 ? 0 : Math.PI);
-
-  // plane circling the airport
-  if (AIRPORT) {
-    const a = t * 0.1;
-    plane.position.set(AIRPORT.x + Math.cos(a) * 2600, AIRPORT.y + 700, AIRPORT.z + Math.sin(a) * 2600);
-    plane.rotation.y = -a;
-  }
-
-  // Panambur watersports: speedboat towing the parasailer, jetskis zipping about
-  {
-    const a = t * 0.22;
-    const bx = WS_C.x + Math.cos(a) * 300, bz = WS_C.z + Math.sin(a) * 300;
-    speedboat.position.set(bx, 1.2, bz);
-    speedboat.rotation.y = -a;
-    chute.position.set(WS_C.x + Math.cos(a - 0.45) * 300, 95 + Math.sin(t * 0.8) * 8, WS_C.z + Math.sin(a - 0.45) * 300);
-    const j1 = t * 0.5;
-    jetskis[0].position.set(WS_C.x + Math.cos(j1) * 150, 1, WS_C.z + 120 + Math.sin(j1) * 110);
-    jetskis[0].rotation.y = -j1 + Math.PI / 2;
-    const j2 = -t * 0.38;
-    jetskis[1].position.set(WS_C.x - 140 + Math.cos(j2) * 110, 1, WS_C.z - 100 + Math.sin(j2) * 130);
-    jetskis[1].rotation.y = -j2 - Math.PI / 2;
-  }
-
-  // NH-66 traffic
-  cars.forEach((c) => {
-    const frac = ((c.off + c.dir * t * c.speed / c.path.total) % 1 + 1) % 1;
-    const p = placeOnPath(c.path, frac, c.lane);
-    c.mesh.position.set(p.x, p.y, p.z);
-    c.mesh.rotation.y = p.rot + (c.dir > 0 ? 0 : Math.PI) + Math.PI / 2;
-  });
-  // cargo ships steaming toward the port
-  ships.forEach((s, i) => {
-    s.position.z += (i ? -1 : 1) * 6 * 0.16;
-    if (s.position.z > 10000) s.position.z = -30000;
-    if (s.position.z < -30000) s.position.z = 10000;
-  });
-
-  clouds.forEach((c, i) => {
-    c.position.x += 1.6 + (i % 3) * 0.5;
-    if (c.position.x > TX1 + 3000) c.position.x = TX0 - 3000;
-  });
-
-  renderer.render(scene, camera);
-  updateLabels();
-}
-animate();
+refresh();
 </script>
 </body>
 </html>
