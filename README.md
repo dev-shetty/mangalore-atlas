@@ -98,3 +98,8 @@ A local close-up reported approximately 144 fps after the final rendering fixes.
 
 Remaining limitations include procedural street layouts, simplified landmark architecture, approximate watercraft paths, and external CDN dependencies.
 Real-device touch testing and lower-end GPU profiling remain necessary before a commercial release.
+
+## Social preview
+
+Both map pages use `assets/og-image.png`, a 1200 × 630 PNG captured from the Three.js golden-hour view with a title overlay.
+Before deployment, set `og:image` and `twitter:image` in both HTML files to the full public HTTPS URL of this asset. Relative paths support local previews, but social crawlers require an absolute URL.

@@ -4,7 +4,7 @@
   const panel = document.createElement('details');
   panel.className = 'spatial-panel';
   panel.open = false;
-  panel.innerHTML = `<summary aria-label="Map settings" title="Map settings">⚙ <span>View</span></summary>
+  panel.innerHTML = `<summary aria-label="Map settings" title="Map settings"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="currentColor" stroke="none"/><circle cx="15" cy="17" r="3" fill="currentColor" stroke="none"/></svg><span>View</span><svg class="view-chevron" aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 4 4 4-4"/></svg></summary>
     <div class="settings-body"><h2>Map settings</h2>
     <label for="spatial-view">Perspective</label>
     <div data-select="spatial-view"></div>
@@ -156,7 +156,8 @@
     panel.addEventListener('toggle', () => { if (!panel.open) close(); });
     return trigger;
   }
-  const view = customSelect('spatial-view', [['oblique', 'City perspective'], ['street', 'Close perspective'], ['top', 'Overhead']], 'oblique');
+  const view = customSelect('spatial-view', [['oblique', 'City perspective'], ['street', 'Close perspective'], ['top', 'Overhead']], 'street');
+  document.getElementById('btnHome').addEventListener('click', () => { view.value = 'street'; });
   const light = customSelect('spatial-light', [['golden', 'Golden hour'], ['day', 'Coastal daylight']], 'golden');
   const present = panel.querySelector('#spatial-present');
   const status = panel.querySelector('.spatial-status');

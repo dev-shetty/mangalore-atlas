@@ -35,11 +35,15 @@ summary::-webkit-details-marker { display: none; }
 #trip { border: none; padding: 0 20px 16px; max-height: none; }
 #trip h2 { display: none; }
 #trip .empty { font-size: 11px; line-height: 1.6; }
-.renderer-switch { position: absolute; top: 18px; right: 102px; display: flex; gap: 3px; padding: 4px; border: 1px solid #ffffffc0; border-radius: 12px; background: var(--panel); box-shadow: 0 2px 14px #203e3212; z-index: 12; }
-.renderer-switch a { padding: 8px 13px; border-radius: 8px; font-size: 11px; font-weight: 600; color: #748179; text-decoration: none; }
+.renderer-switch { box-sizing: border-box; height: 44px; align-items: stretch; position: absolute; top: 18px; right: 126px; display: flex; gap: 3px; padding: 4px; border: 1px solid #ffffffc0; border-radius: 12px; background: var(--panel); box-shadow: 0 2px 14px #203e3212; z-index: 12; }
+.renderer-switch a { display: flex; align-items: center; justify-content: center; box-sizing: border-box; padding: 8px 13px; border-radius: 8px; font-size: 12px; font-weight: 600; color: #748179; text-decoration: none; }
 .renderer-switch a[aria-current] { background: #2b493b; color: white; box-shadow: 0 1px 3px #00000012; }
 .spatial-panel { position: absolute; top: 18px; right: 16px; z-index: 13; color: var(--dark); }
-.spatial-panel > summary { list-style: none; cursor: pointer; border: 1px solid #ffffffc0; border-radius: 11px; background: var(--panel); padding: 11px 13px; font-size: 11px; font-weight: 600; box-shadow: 0 2px 14px #203e3212; }
+.spatial-panel > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; box-sizing: border-box; height: 44px; width: 100px; border: 1px solid #9eb6a9; border-radius: 11px; background: #fff; color: #254e3d; font-size: 13px; font-weight: 650; box-shadow: 0 2px 3px #203e3220, 0 4px 12px #203e3214; user-select: none; transition: background 140ms, border-color 140ms, box-shadow 140ms; }
+.spatial-panel[open] > summary { background: #e5eee7; border-color: #628a74; box-shadow: inset 0 1px 3px #203e3215; }
+.spatial-panel[open] .view-chevron { transform: rotate(180deg); }
+.spatial-panel > summary:active { background: #dbe8df; box-shadow: inset 0 1px 3px #203e3225; }
+@media (hover:hover) and (pointer:fine) { .spatial-panel > summary:hover { background: #edf4ee; border-color: #628a74; box-shadow: 0 2px 4px #203e3225, 0 5px 14px #203e321c; } }
 .settings-body { position: absolute; top: 48px; right: 0; width: 244px; padding: 18px; background: var(--panel); border: 1px solid #ffffffb0; border-radius: 16px; box-shadow: 0 10px 36px #203e3220; max-height: calc(100dvh - 95px); overflow-y: auto; backdrop-filter: blur(16px); }
 .settings-body h2 { font-size: 13px; font-weight: 600; margin: 0 0 16px; }
 .spatial-panel label { display: block; font-size: 10px; color: #79857c; margin: 12px 0 6px; }
@@ -74,8 +78,8 @@ body.presentation #card { left: 24px; }
 @media (max-width:700px) {
   #sidebar { top: 68px; bottom: 12px; left: 12px; width: min(288px, calc(100vw - 24px)); }
   #toggle, #toggle.shifted { top: 16px; left: 12px; }
-  .renderer-switch { top: 16px; right: 92px; }
-  .renderer-switch a { padding: 8px 10px; }
+  .renderer-switch { top: 16px; right: 122px; }
+  .renderer-switch a { display: flex; align-items: center; justify-content: center; box-sizing: border-box; padding: 8px 10px; }
   .spatial-panel { top: 16px; right: 12px; }
   #card { left: 12px; bottom: 30px; width: min(290px, calc(100vw - 24px)); }
   #sidebar:not(.hidden) ~ #card { visibility: hidden; }

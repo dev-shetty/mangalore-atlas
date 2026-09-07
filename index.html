@@ -4,6 +4,23 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Mangalore Atlas — 3D World</title>
+<meta name="description" content="Explore Mangalore in 3D: a living miniature of its coast, rivers, temple hills, and city streets." />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Mangalore Atlas" />
+<meta property="og:title" content="Mangalore Atlas — Explore the city in 3D" />
+<meta property="og:description" content="A living miniature of Kudla. Discover Mangalore’s coast, rivers, temple hills, and city streets." />
+<!-- Set both image URLs to the absolute public URL when deploying. -->
+<meta property="og:image" content="assets/og-image.png" />
+<meta property="og:image:type" content="image/png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="Mangalore Atlas: a golden-hour 3D miniature of the city between its rivers and the Arabian Sea." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Mangalore Atlas — Explore the city in 3D" />
+<meta name="twitter:description" content="A living miniature of Kudla. Discover Mangalore’s coast, rivers, temple hills, and city streets." />
+<meta name="twitter:image" content="assets/og-image.png" />
+<meta name="twitter:image:alt" content="Mangalore Atlas: a golden-hour 3D miniature of the city between its rivers and the Arabian Sea." />
+
 <script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
 <script src="miniature.js"></script>
@@ -184,7 +201,7 @@
 
   @media (max-width: 640px) { #sidebar { width: 260px; } #toggle { left: 272px; } }
 </style>
-<link rel="stylesheet" href="spatial.css?v=miniature-1" />
+<link rel="stylesheet" href="spatial.css?v=toolbar-3" />
 </head>
 <body>
 <canvas id="scene"></canvas>
@@ -631,8 +648,12 @@ scene.background = new THREE.Color(0xb9d4dc);
 scene.fog = new THREE.Fog(0xb9d4dc, 16000, 58000);
 
 const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 10, 120000);
-const HOME_POS = new THREE.Vector3(-5200, 3600, 5400);
-const HOME_TGT = new THREE.Vector3(900, 100, -3200);
+const HOME_LANDMARK = LANDMARKS.find(l => l.model === "kadri");
+const HOME_TGT = new THREE.Vector3(HOME_LANDMARK.x, HOME_LANDMARK.y + 55, HOME_LANDMARK.z);
+// Match the Close perspective preset, keeping the coastal viewing direction.
+const HOME_POS = HOME_TGT.clone().add(new THREE.Vector3().setFromSphericalCoords(
+  1600, 1.22, 0.65
+));
 camera.position.copy(HOME_POS);
 
 // debug/deep-link: ?cam=px,py,pz,tx,ty,tz positions the camera
@@ -641,11 +662,11 @@ camera.position.copy(HOME_POS);
   if (q && q.split(",").length === 6 && q.split(",").every(v => v.trim() !== "" && Number.isFinite(Number(v)) && Math.abs(Number(v)) < 120000)) {
     const [px, py, pz, tx, ty, tz] = q.split(",").map(Number);
     camera.position.set(px, py, pz);
-    HOME_TGT.set(tx, ty, tz);
+    camera.userData.savedTarget = new THREE.Vector3(tx, ty, tz);
   }
 }
 const controls = new THREE.OrbitControls(camera, canvas);
-controls.target.copy(HOME_TGT);
+controls.target.copy(camera.userData.savedTarget || HOME_TGT);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.maxPolarAngle = 1.38;
@@ -2433,7 +2454,7 @@ function animate() {
 }
 animate();
 </script>
-<script src="spatial.js"></script>
+<script src="spatial.js?v=view-button-2"></script>
 <script src="welcome.js"></script>
 </body>
 </html>

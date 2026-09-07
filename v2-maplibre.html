@@ -4,6 +4,23 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Mangalore Atlas v2 — MapLibre 3D</title>
+<meta name="description" content="Explore Mangalore in 3D: a living miniature of its coast, rivers, temple hills, and city streets." />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Mangalore Atlas" />
+<meta property="og:title" content="Mangalore Atlas — Explore the city in 3D" />
+<meta property="og:description" content="A living miniature of Kudla. Discover Mangalore’s coast, rivers, temple hills, and city streets." />
+<!-- Set both image URLs to the absolute public URL when deploying. -->
+<meta property="og:image" content="assets/og-image.png" />
+<meta property="og:image:type" content="image/png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="Mangalore Atlas: a golden-hour 3D miniature of the city between its rivers and the Arabian Sea." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Mangalore Atlas — Explore the city in 3D" />
+<meta name="twitter:description" content="A living miniature of Kudla. Discover Mangalore’s coast, rivers, temple hills, and city streets." />
+<meta name="twitter:image" content="assets/og-image.png" />
+<meta name="twitter:image:alt" content="Mangalore Atlas: a golden-hour 3D miniature of the city between its rivers and the Arabian Sea." />
+
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
@@ -114,7 +131,7 @@
     box-shadow: 0 2px 6px rgba(0,0,0,0.45); }
   @media (max-width: 640px) { #sidebar { width: 260px; } #toggle { left: 272px; } }
 </style>
-<link rel="stylesheet" href="spatial.css?v=miniature-1" />
+<link rel="stylesheet" href="spatial.css?v=toolbar-3" />
 </head>
 <body>
 <div id="map"></div>
@@ -398,14 +415,15 @@ const LANDMARKS = [
 ];
 
 const CITY_CENTER = [74.8420, 12.8700];
+const HOME_CENTER = [74.8556, 12.8859]; // Kadri temple district.
 
 /* ============================ MAP ============================ */
 const map = new maplibregl.Map({
   container: "map",
   style: "https://tiles.openfreemap.org/styles/liberty",
-  center: CITY_CENTER,
-  zoom: 14.2,
-  pitch: 64,
+  center: HOME_CENTER,
+  zoom: 16,
+  pitch: 72,
   bearing: -15,
   antialias: true,
   maxPitch: 78,
@@ -1567,7 +1585,7 @@ map.on("mousedown", () => { stopTour(); });
 
 document.getElementById("btn3d").onclick = () => map.easeTo({ pitch: 62, duration: 1000 });
 document.getElementById("btnTop").onclick = () => map.easeTo({ pitch: 0, bearing: 0, duration: 1000 });
-document.getElementById("btnHome").onclick = () => { stopTour(); map.flyTo({ center: CITY_CENTER, zoom: 13.2, pitch: 60, bearing: -15, duration: 1800 }); };
+document.getElementById("btnHome").onclick = () => { stopTour(); map.flyTo({ center: HOME_CENTER, zoom: 16, pitch: 72, bearing: -15, duration: 1800 }); };
 
 /* ==================== STORY MODE ==================== */
 const STORY = [
@@ -1643,7 +1661,7 @@ function exitStory() {
   setTimeout(() => storyEl.classList.remove("on"), 400);
   sidebar.classList.remove("hidden");
   toggleBtn.classList.remove("shifted");
-  map.flyTo({ center: CITY_CENTER, zoom: 13.2, pitch: 60, bearing: -15, duration: 2200 });
+  map.flyTo({ center: HOME_CENTER, zoom: 16, pitch: 72, bearing: -15, duration: 2200 });
 }
 document.getElementById("btnStory").onclick = () => (storyOn ? exitStory() : startStory());
 storyEl.querySelector(".s-next").onclick = () => (storyIdx >= STORY.length - 1 ? exitStory() : storyChapter(storyIdx + 1));
@@ -1669,6 +1687,6 @@ toggleBtn.onclick = () => { sidebar.classList.toggle("hidden"); toggleBtn.classL
 
 refresh();
 </script>
-<script src="spatial.js"></script>
+<script src="spatial.js?v=view-button-2"></script>
 </body>
 </html>
