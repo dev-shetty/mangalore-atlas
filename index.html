@@ -6,6 +6,7 @@
 <title>Mangalore Atlas — 3D World</title>
 <script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script src="miniature.js"></script>
 <style>
   :root {
     --panel: rgba(255, 255, 255, 0.96);
@@ -183,6 +184,7 @@
 
   @media (max-width: 640px) { #sidebar { width: 260px; } #toggle { left: 272px; } }
 </style>
+<link rel="stylesheet" href="spatial.css?v=miniature-1" />
 </head>
 <body>
 <canvas id="scene"></canvas>
@@ -561,7 +563,7 @@ const HILLS = [
 ].map((h) => ({ ...h, ...ll(h.lng, h.lat) }));
 const KATEEL = ll(74.8855, 13.0030);
 
-function rawHeight(x, z) {
+function baseHeight(x, z) {
   const d = x - coastX(z); // metres inland
   if (d < 0) return -7 - Math.min(22, -d * 0.011); // sea floor drops fast: crisp dark coast
   let h;
@@ -590,10 +592,13 @@ function rawHeight(x, z) {
   return h;
 }
 
-// each landmark sits at its REAL elevation (alt, metres ASL); the terrain blends
+// Illustrated relief: preserve beaches, smoothly exaggerate inland elevation up to 4×.
+const relief = h => h <= 3 ? h : h * (1 + 3 * THREE.MathUtils.smoothstep(h, 3, 30));
+function rawHeight(x, z) { return relief(baseHeight(x, z)); }
+// each landmark sits at its illustrated elevation (alt, metres ASL); the terrain blends
 // up/down to meet it across a flatten pad — so hilltop places are genuinely on hills.
 LANDMARKS.forEach((l) => {
-  l.y = l.alt !== undefined ? l.alt : Math.max(rawHeight(l.x, l.z), l.cat === "beach" ? 1.4 : 1.0);
+  l.y = l.alt !== undefined ? relief(l.alt) : Math.max(rawHeight(l.x, l.z), l.cat === "beach" ? 1.4 : 1.0);
   l.padR = l.pad || 240;
 });
 function heightAt(x, z) {
@@ -601,7 +606,7 @@ function heightAt(x, z) {
   for (const l of LANDMARKS) {
     const d = Math.hypot(x - l.x, z - l.z);
     if (d < l.padR) {
-      const t = 1 - d / l.padR;
+      const t = 1 - Math.max(0, d - l.padR * .6) / (l.padR * .4);
       const w = t * t * (3 - 2 * t);
       h = h * (1 - w) + l.y * w;
     }
@@ -615,19 +620,25 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.88;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x8ec9ec);
-scene.fog = new THREE.Fog(0xaad4ee, 48000, 115000);
+scene.background = new THREE.Color(0xb9d4dc);
+scene.fog = new THREE.Fog(0xb9d4dc, 16000, 58000);
 
 const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 10, 120000);
-const HOME_POS = new THREE.Vector3(-11500, 8200, 10500);
-const HOME_TGT = new THREE.Vector3(1500, 0, -2500);
+const HOME_POS = new THREE.Vector3(-5200, 3600, 5400);
+const HOME_TGT = new THREE.Vector3(900, 100, -3200);
 camera.position.copy(HOME_POS);
 
 // debug/deep-link: ?cam=px,py,pz,tx,ty,tz positions the camera
 {
   const q = new URLSearchParams(location.search).get("cam");
-  if (q) {
+  if (q && q.split(",").length === 6 && q.split(",").every(v => v.trim() !== "" && Number.isFinite(Number(v)) && Math.abs(Number(v)) < 120000)) {
     const [px, py, pz, tx, ty, tz] = q.split(",").map(Number);
     camera.position.set(px, py, pz);
     HOME_TGT.set(tx, ty, tz);
@@ -637,18 +648,38 @@ const controls = new THREE.OrbitControls(camera, canvas);
 controls.target.copy(HOME_TGT);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
-controls.maxPolarAngle = 1.45;
+controls.maxPolarAngle = 1.38;
+controls.screenSpacePanning = false;
+controls.touches.ONE = THREE.TOUCH.ROTATE;
+controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
+canvas.style.touchAction = 'none';
 controls.minDistance = 250;
 controls.maxDistance = 52000;
 
-scene.add(new THREE.HemisphereLight(0xd9ecff, 0x94865f, 0.62));
+const skyLight = new THREE.HemisphereLight(0xd9ecff, 0x82735e, 0.48);
+scene.add(skyLight);
 const sun = new THREE.DirectionalLight(0xfff3da, 1.18);
-sun.position.set(-8000, 14000, -6000);
-scene.add(sun);
+const sunOffset = new THREE.Vector3(-7000, 9000, -5000);
+sun.position.copy(sunOffset);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.bias = -0.00015;
+sun.shadow.normalBias = 2;
+sun.shadow.camera.near = 100;
+sun.shadow.camera.far = 35000;
+scene.add(sun, sun.target);
+function updateSun() {
+  const span = Math.min(15000, Math.max(1500, camera.position.distanceTo(controls.target) * 0.65));
+  const sc = sun.shadow.camera;
+  sc.left = sc.bottom = -span; sc.right = sc.top = span;
+  sc.updateProjectionMatrix();
+  sun.target.position.copy(controls.target);
+  sun.position.copy(controls.target).add(sunOffset);
+}
 
 /* ---- terrain ---- */
 const TX0 = -11000, TX1 = 14000, TZ0 = -40500, TZ1 = 11500;
-const SEGX = 190, SEGZ = 340;
+const SEGX = 320, SEGZ = 640;
 const terrainGeo = new THREE.PlaneGeometry(TX1 - TX0, TZ1 - TZ0, SEGX, SEGZ);
 terrainGeo.rotateX(-Math.PI / 2);
 {
@@ -662,13 +693,14 @@ terrainGeo.rotateX(-Math.PI / 2);
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i) + (TX0 + TX1) / 2, z = pos.getZ(i) + (TZ0 + TZ1) / 2;
     const h = heightAt(x, z);
+    const colorHeight = baseHeight(x, z);
     pos.setY(i, h);
     pos.setX(i, x); pos.setZ(i, z);
     if (h < 0) tmp.copy(cDeep).lerp(cShallow, Math.min(1, (h + 16) / 16));
     else if (h < 2.4 || (h < 5.5 && nearBeach(x, z))) tmp.copy(cSand);   // wide sandy aprons at beaches
-    else if (h < 22) {
+    else if (colorHeight < 22) {
       tmp.copy(cPlain).lerp(cGreen1, Math.max(0, Math.min(1, fbm(x * 0.0011, z * 0.0011) - 0.40) * 2.4));
-    } else if (h < 48) tmp.copy(cGreen1);
+    } else if (colorHeight < 48) tmp.copy(cGreen1);
     else tmp.copy(cGreen2);
     colors[i * 3] = tmp.r; colors[i * 3 + 1] = tmp.g; colors[i * 3 + 2] = tmp.b;
   }
@@ -684,26 +716,42 @@ terrainGeo.rotateX(-Math.PI / 2);
   }
   terrainGeo.attributes.color.needsUpdate = true;
 }
+// Sample the actual mesh triangles, so all later geometry shares the rendered ground.
+const analyticHeight = heightAt;
+heightAt = function(x, z) {
+  const gx = (x - TX0) / (TX1 - TX0) * SEGX, gz = (z - TZ0) / (TZ1 - TZ0) * SEGZ;
+  if (gx < 0 || gz < 0 || gx >= SEGX || gz >= SEGZ) return analyticHeight(x, z);
+  const ix = Math.floor(gx), iz = Math.floor(gz), u = gx - ix, v = gz - iz;
+  const pos = terrainGeo.attributes.position, a = iz * (SEGX + 1) + ix;
+  const h00 = pos.getY(a), h10 = pos.getY(a + 1), h01 = pos.getY(a + SEGX + 1), h11 = pos.getY(a + SEGX + 2);
+  return u + v <= 1 ? h00 + u * (h10 - h00) + v * (h01 - h00)
+    : h11 + (1 - u) * (h01 - h11) + (1 - v) * (h10 - h11);
+};
+LANDMARKS.forEach(l => { l.y = heightAt(l.x, l.z); });
 const terrain = new THREE.Mesh(terrainGeo, new THREE.MeshPhongMaterial({ vertexColors: true, flatShading: true, shininess: 0 }));
+terrain.receiveShadow = true;
 scene.add(terrain);
 
 /* ---- water ---- */
-const water = new THREE.Mesh(
-  new THREE.PlaneGeometry(90000, 90000),
-  new THREE.MeshLambertMaterial({ color: 0x1c60a0, transparent: true, opacity: 0.93 })
-);
-water.rotation.x = -Math.PI / 2;
-water.position.set(0, 0, -7000);
-scene.add(water);
+const water = Miniature.createWater({ THREE, scene, coastX, baseHeight });
+const ROAD_SEGMENTS = [];
+const BRIDGE_SPANS = [];
+function travelHeight(x, z) {
+  for (const bridge of BRIDGE_SPANS) {
+    if (distSeg(x,z,bridge.a.x,bridge.a.z,bridge.b.x,bridge.b.z) < bridge.width/2+12) return bridge.deckY+4;
+  }
+  return Math.max(heightAt(x,z),1);
+}
 
 /* ---- roads ---- */
 function makeRoad(lls, width = 70, color = 0x7d8590) {
   const pts = lls.map(([lng, lat]) => ll(lng, lat));
+  for (let i = 1; i < pts.length; i++) ROAD_SEGMENTS.push({ a: pts[i-1], b: pts[i], width });
   // resample
   const path = [];
   for (let i = 0; i < pts.length - 1; i++) {
     const a = pts[i], b = pts[i + 1];
-    const n = Math.max(2, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 160));
+    const n = Math.max(2, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 35));
     for (let j = 0; j < n; j++) path.push({ x: a.x + ((b.x - a.x) * j) / n, z: a.z + ((b.z - a.z) * j) / n });
   }
   path.push(pts[pts.length - 1]);
@@ -713,8 +761,10 @@ function makeRoad(lls, width = 70, color = 0x7d8590) {
     let dx = q.x - o.x, dz = q.z - o.z;
     const len = Math.hypot(dx, dz) || 1;
     const nx = -dz / len, nz = dx / len;
-    const y = Math.max(heightAt(p.x, p.z), 1.0) + 1.6;
-    verts.push(p.x + nx * width / 2, y, p.z + nz * width / 2, p.x - nx * width / 2, y, p.z - nz * width / 2);
+    for (const sign of [1, -1]) {
+      const x = p.x + sign * nx * width / 2, z = p.z + sign * nz * width / 2;
+      verts.push(x, Math.max(heightAt(x, z), 1.0) + 2, z);
+    }
     if (i < path.length - 1) {
       const k = i * 2;
       idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
@@ -725,6 +775,7 @@ function makeRoad(lls, width = 70, color = 0x7d8590) {
   g.setIndex(idx);
   g.computeVertexNormals();
   const mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color }));
+  mesh.receiveShadow = true;
   scene.add(mesh);
 }
 // NH-66: hugs the coast in the north, crosses the Gurupura at Kulur bridge,
@@ -742,17 +793,19 @@ makeRoad(NH66_PTS, 130, 0x656c76);
 function makeBridge(lngA, latA, lngB, latB, width = 90) {
   const a = ll(lngA, latA), b = ll(lngB, latB);
   const len = Math.hypot(b.x - a.x, b.z - a.z);
+  const deckY = Math.max(14,heightAt(a.x,a.z)+8,heightAt(b.x,b.z)+8);
+  BRIDGE_SPANS.push({a,b,width,deckY});
   const g = new THREE.Group();
   const deck = new THREE.Mesh(new THREE.BoxGeometry(len, 8, width), new THREE.MeshLambertMaterial({ color: 0x7d848c }));
-  deck.position.y = 14;
+  deck.position.y = deckY;
   g.add(deck);
   const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 4, 6), new THREE.MeshLambertMaterial({ color: 0xb8bec5 }));
-  rail.position.set(0, 20, width / 2 - 3); g.add(rail);
+  rail.position.set(0, deckY+6, width / 2 - 3); g.add(rail);
   const rail2 = rail.clone(); rail2.position.z = -width / 2 + 3; g.add(rail2);
   const nP = Math.max(2, Math.round(len / 220));
   for (let i = 0; i <= nP; i++) {
-    const p = new THREE.Mesh(new THREE.BoxGeometry(16, 22, width * 0.7), new THREE.MeshLambertMaterial({ color: 0x9aa0a8 }));
-    p.position.set(-len / 2 + (len * i) / nP, 0, 0);
+    const p = new THREE.Mesh(new THREE.BoxGeometry(16, deckY+12, width * 0.7), new THREE.MeshLambertMaterial({ color: 0x9aa0a8 }));
+    p.position.set(-len / 2 + (len * i) / nP, (deckY-12)/2, 0);
     g.add(p);
   }
   g.position.set((a.x + b.x) / 2, 0, (a.z + b.z) / 2);
@@ -835,59 +888,7 @@ const ZONES = [
   { lng: 74.760, lat: 13.221, r: 800, n: 170, hMin: 8, hMax: 16 },      // Kaup
   { lng: 74.782, lat: 13.145, r: 700, n: 120, hMin: 6, hMax: 14 },      // Padubidri
 ];
-// coastal-town palette: warm creams, ochres, and washed pastels like real Kudla homes
-const bPalette = [0xfff6e5, 0xf6e2bd, 0xeccf9f, 0xf3d9c0, 0xe8b98a, 0xdfe8f0, 0xd8e6cf, 0xf0cfc2, 0xf7e6a8, 0xe6d2b8].map((c) => new THREE.Color(c));
-const roofPalette = [0xa0522d, 0x9c3a2a, 0xb5651d, 0x8e3b28, 0xaa5a35].map((c) => new THREE.Color(c));
-{
-  const placements = [];
-  let seed = 1;
-  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  ZONES.forEach((zn) => {
-    const c = ll(zn.lng, zn.lat);
-    let placed = 0, tries = 0;
-    while (placed < zn.n && tries < zn.n * 4) {
-      tries++;
-      const a = rnd() * Math.PI * 2, rr = Math.sqrt(rnd()) * zn.r;
-      const x = c.x + Math.cos(a) * rr, z = c.z + Math.sin(a) * rr;
-      const h = heightAt(x, z);
-      if (h < 2.2 || h > 90) continue;
-      if (riverDist(x, z) < 180) continue;
-      let nearLm = false;
-      for (const l of LANDMARKS) if (Math.hypot(x - l.x, z - l.z) < 200) { nearLm = true; break; }
-      if (nearLm) continue;
-      const bh = zn.hMin + rnd() * (zn.hMax - zn.hMin);
-      placements.push({ x, z, y: h, w: 28 + rnd() * 34, d: 28 + rnd() * 34, h: bh, rot: rnd() * Math.PI,
-        col: bPalette[(rnd() * bPalette.length) | 0],
-        // low houses get sloped Mangalore-tile roofs; taller blocks stay flat
-        roof: bh < 26 && rnd() < 0.72 ? roofPalette[(rnd() * roofPalette.length) | 0] : null });
-      placed++;
-    }
-  });
-  const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial(), placements.length);
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s3 = new THREE.Vector3(), p3 = new THREE.Vector3();
-  placements.forEach((p, i) => {
-    e.set(0, p.rot, 0); q.setFromEuler(e);
-    s3.set(p.w, p.h, p.d);
-    p3.set(p.x, p.y + p.h / 2 - 1, p.z);
-    m4.compose(p3, q, s3);
-    inst.setMatrixAt(i, m4);
-    inst.setColorAt(i, p.col);
-  });
-  scene.add(inst);
-  // slanted terracotta tile roofs (4-sided pyramids aligned to each house)
-  const roofed = placements.filter((p) => p.roof);
-  const rInst = new THREE.InstancedMesh(new THREE.ConeGeometry(0.74, 1, 4), new THREE.MeshLambertMaterial(), roofed.length);
-  roofed.forEach((p, i) => {
-    e.set(0, p.rot + Math.PI / 4, 0); q.setFromEuler(e);
-    const rr = Math.hypot(p.w, p.d);
-    s3.set(rr, 6 + (p.h % 5), rr);
-    p3.set(p.x, p.y + p.h - 1 + (6 + (p.h % 5)) / 2, p.z);
-    m4.compose(p3, q, s3);
-    rInst.setMatrixAt(i, m4);
-    rInst.setColorAt(i, p.roof);
-  });
-  scene.add(rInst);
-}
+const districtWorld = Miniature.buildDistricts({ THREE, scene, zones: ZONES, landmarks: LANDMARKS, ll, heightAt, baseHeight, coastX, riverDist, roads: ROAD_SEGMENTS, distSeg });
 
 /* ---- sea rocks (Rudra Shile at Someshwara, Bengre tip, lighthouse rocks) ---- */
 {
@@ -957,7 +958,7 @@ const roofPalette = [0xa0522d, 0x9c3a2a, 0xb5651d, 0x8e3b28, 0xaa5a35].map((c) =
       const a = hash2(bi * 17 + i, 9) * Math.PI * 2, rr = 90 + Math.sqrt(hash2(i, bi * 7 + 1)) * 420;
       const x = b.x + Math.cos(a) * rr, z = b.z + Math.sin(a) * rr;
       const h = heightAt(x, z);
-      if (h < 1.0 || h > 7 || x < coastX(z) + 45) continue;     // land only, near the sand
+      if (h < 1.0 || h > relief(7) || x < coastX(z) + 45) continue;     // land only, near the sand
       const s = 0.8 + hash2(i, bi) * 0.7, lean = (hash2(i * 5, bi) - 0.5) * 0.3;
       trunks.push({ x, z, y: h, s, lean });
       tops.push({ x: x + lean * 34 * s, z, y: h + 32 * s, s });
@@ -993,18 +994,18 @@ const roofPalette = [0xa0522d, 0x9c3a2a, 0xb5651d, 0x8e3b28, 0xaa5a35].map((c) =
     tries++;
     const x = TX0 + rnd() * (TX1 - TX0), z = TZ0 + rnd() * (TZ1 - TZ0);
     const h = heightAt(x, z);
-    if (h < 2.5) continue;
+    if (h < 2.5 || districtWorld.occupied(x, z, 28)) continue;
     if (riverDist(x, z) < 120) continue;
     const green = h > 20 || fbm(x * 0.0011, z * 0.0011) > 0.5;
     if (!green) continue;
     spots.push({ x, z, y: h, s: 0.7 + rnd() * 0.9, g: rnd() });
   }
-  const inst = new THREE.InstancedMesh(new THREE.ConeGeometry(26, 62, 6), new THREE.MeshLambertMaterial(), spots.length);
+  const inst = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(25, 0), new THREE.MeshLambertMaterial(), spots.length);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s3 = new THREE.Vector3(), p3 = new THREE.Vector3();
   const gcols = [new THREE.Color(0x2f6d33), new THREE.Color(0x448840), new THREE.Color(0x255a2a)];
   spots.forEach((p, i) => {
-    s3.set(p.s, p.s, p.s);
-    p3.set(p.x, p.y + 31 * p.s, p.z);
+    s3.set(p.s, p.s * 1.25, p.s);
+    p3.set(p.x, p.y + 23 * p.s, p.z);
     m4.compose(p3, q, s3);
     inst.setMatrixAt(i, m4);
     inst.setColorAt(i, gcols[(p.g * 3) | 0]);
@@ -1033,7 +1034,8 @@ const clouds = [];
 
 /* ==================== LANDMARK MODEL BUILDERS ==================== */
 const ANIMATED = [];
-const M = (c) => new THREE.MeshLambertMaterial({ color: c });
+const materialCache = new Map();
+const M = c => { if (!materialCache.has(c)) materialCache.set(c, new THREE.MeshLambertMaterial({ color: c })); return materialCache.get(c); };
 function box(w, h, d, c, x = 0, y = 0, z = 0) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), M(c)); m.position.set(x, y + h / 2, z); return m; }
 function cyl(rt, rb, h, c, x = 0, y = 0, z = 0, seg = 12) { const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), M(c)); m.position.set(x, y + h / 2, z); return m; }
 function cone(r, h, c, x = 0, y = 0, z = 0, seg = 12, rotY = 0) { const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, seg), M(c)); m.position.set(x, y + h / 2, z); m.rotation.y = rotY; return m; }
@@ -1799,10 +1801,11 @@ LANDMARKS.forEach((l, i) => {
   const b = BUILDERS[l.model];
   if (!b) return;
   const grp = b();
+  Miniature.detailLandmark(grp, l, { THREE, box, cyl, palm });
   grp.scale.setScalar(LM_SCALE * (l.mScale || 1));
   grp.position.set(l.x, l.y - 0.5, l.z);
   grp.rotation.y = ((l.lng * 997) % 1.2) - 0.6;
-  grp.traverse((o) => { o.userData.lmIdx = i; });
+  grp.traverse((o) => { o.userData.lmIdx = i; if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   scene.add(grp);
   modelEntries.push({ group: grp, landmark: l, idx: i });
 });
@@ -1835,7 +1838,7 @@ function buildPath(ptsLL) {
     const n = Math.max(2, Math.ceil(segLen / 220));
     for (let j = 0; j < n; j++) {
       const x = a.x + ((b.x - a.x) * j) / n, z = a.z + ((b.z - a.z) * j) / n;
-      path.push({ x, z, y: Math.max(heightAt(x, z), 1.0) + 2.6, d: acc });
+      path.push({ x, z, y: travelHeight(x, z) + 2.6, d: acc });
       acc += segLen / n;
     }
   }
@@ -1984,7 +1987,7 @@ const AREAS = [
   ["NH-66", 74.8080, 12.9650], ["NH-66", 74.8440, 12.8200], ["NH-66", 74.7900, 13.1200],
   ["NH-75 · BENGALURU", 74.9350, 12.8545], ["NH-169 · MOODBIDRI", 74.9300, 12.9075],
   ["NETRAVATI RIVER", 74.8950, 12.8630], ["GURUPURA RIVER", 74.8800, 12.9180], ["NANDINI RIVER", 74.8500, 13.0250],
-].map(([name, lng, lat]) => { const p = ll(lng, lat); return { name, x: p.x, z: p.z, y: Math.max(rawHeight(p.x, p.z), 0) + 20 }; });
+].map(([name, lng, lat]) => { const p = ll(lng, lat); return { name, x: p.x, z: p.z, y: Math.max(heightAt(p.x, p.z), 0) + 20 }; });
 const areaDivs = AREAS.map((a) => {
   const d = document.createElement("div");
   d.className = "area";
@@ -2017,15 +2020,18 @@ function updatePills() {
     if (!visibleSet.has(i)) { labelDivs[i].style.display = "none"; return; }
     v3.set(l.x, l.y + 90, l.z).project(camera);
     if (v3.z > 1 || v3.x < -1.1 || v3.x > 1.1 || v3.y < -1.1 || v3.y > 1.1) { labelDivs[i].style.display = "none"; return; }
+    if (i !== selectedIdx && Math.hypot(l.x - controls.target.x, l.z - controls.target.z) > Math.max(1800, camera.position.distanceTo(controls.target) * 1.1)) { labelDivs[i].style.display = "none"; return; }
     cand.push({ i, sx: ((v3.x + 1) / 2) * w, sy: ((-v3.y + 1) / 2) * h, z: v3.z, pw: l.name.length * 6.6 + 34 });
   });
   cand.sort((a, b) => (a.i === selectedIdx ? -1 : b.i === selectedIdx ? 1 : a.z - b.z));
   const placed = [];
+  const distance = camera.position.distanceTo(controls.target);
+  const labelBudget = innerWidth < 700 ? 4 : distance < 3000 ? 5 : 9;
   for (const c of cand) {
     const x0 = c.sx - c.pw / 2, x1 = c.sx + c.pw / 2, y0 = c.sy - 36, y1 = c.sy;
     const clash = placed.some((p) => x0 < p.x1 + 4 && x1 > p.x0 - 4 && y0 < p.y1 + 4 && y1 > p.y0 - 4);
     const d = labelDivs[c.i];
-    if (clash) { d.style.display = "none"; continue; }
+    if (clash || placed.length >= labelBudget) { d.style.display = "none"; continue; }
     placed.push({ x0, x1, y0, y1 });
     d.style.display = "flex";
     d.style.left = c.sx + "px";
@@ -2035,11 +2041,18 @@ function updatePills() {
 }
 
 /* ---- selection card ---- */
+const focusRing = new THREE.Mesh(new THREE.RingGeometry(135, 150, 64), new THREE.MeshBasicMaterial({ color: 0xff9f43, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }));
+focusRing.rotation.x = -Math.PI / 2;
+focusRing.visible = false;
+scene.add(focusRing);
 const card = document.getElementById("card");
 let selectedIdx = null;
 function selectLandmark(i, fly) {
   selectedIdx = i;
   const l = LANDMARKS[i], c = CATEGORIES[l.cat];
+  focusRing.position.set(l.x, l.y + 3, l.z);
+  focusRing.visible = true;
+  window.dispatchEvent(new CustomEvent('atlas:select', { detail: { id: i, name: l.name, lng: l.lng, lat: l.lat, category: l.cat } }));
   card.querySelector(".c-title").textContent = l.name;
   const cc = card.querySelector(".c-cat"); cc.textContent = c.label; cc.style.color = c.color;
   card.querySelector(".c-desc").textContent = l.desc;
@@ -2055,7 +2068,7 @@ function updateCardBtn() {
   btn.disabled = inTrip;
   btn.onclick = () => { if (!trip.includes(selectedIdx)) { trip.push(selectedIdx); renderTrip(); updateCardBtn(); } };
 }
-window.closeCard = () => { card.style.display = "none"; selectedIdx = null; };
+window.closeCard = () => { card.style.display = "none"; selectedIdx = null; focusRing.visible = false; };
 
 /* ---- camera fly ---- */
 let flight = null;
@@ -2071,7 +2084,7 @@ function flyToLandmark(i) {
 function flyHome() {
   flight = { t: 0, p0: camera.position.clone(), p1: HOME_POS.clone(), t0: controls.target.clone(), t1: HOME_TGT.clone() };
 }
-canvas.addEventListener("pointerdown", () => { flight = null; stopTour(); });
+controls.addEventListener('start', () => { flight = null; stopTour(); stopTripTour(); controls.autoRotate = false; });
 
 /* ---- raycast click on models ---- */
 const raycaster = new THREE.Raycaster();
@@ -2291,7 +2304,7 @@ function startStory() {
   stopTour();
   sidebar.classList.add("hidden");
   toggleBtn.classList.add("shifted");
-  controls.autoRotate = true;
+  controls.autoRotate = !reducedMotion.matches;
   controls.autoRotateSpeed = 0.45;
   storyEl.classList.add("on");
   storyChapter(0);
@@ -2328,19 +2341,33 @@ addEventListener("resize", () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
+Miniature.createLife({ THREE, scene, landmarks: LANDMARKS, modelEntries, heightAt, ferry, speedboat, ships });
 const clock = new THREE.Clock();
+let lastFrame = 0;
 function animate() {
   requestAnimationFrame(animate);
-  const t = clock.getElapsedTime();
+  const elapsed = clock.getElapsedTime();
+  const rawDt = elapsed - lastFrame;
+  const dt = Math.min(rawDt, 0.05);
+  lastFrame = elapsed;
+  const t = reducedMotion.matches ? 0 : elapsed;
 
   if (flight) {
-    flight.t += 0.012;
+    flight.t += reducedMotion.matches ? 1 : dt / 1.4;
     const k = flight.t >= 1 ? 1 : 1 - Math.pow(1 - flight.t, 3);
     camera.position.lerpVectors(flight.p0, flight.p1, k);
     controls.target.lerpVectors(flight.t0, flight.t1, k);
+    if (!reducedMotion.matches) camera.position.y += Math.sin(k * Math.PI) * Math.min(900, flight.p0.distanceTo(flight.p1) * 0.12);
     if (flight.t >= 1) flight = null;
   }
   controls.update();
+  // Keep the orbit camera above the same surface as the city.
+  const floor = Math.max(0, heightAt(camera.position.x, camera.position.z)) + 45;
+  if (camera.position.y < floor) camera.position.y = floor;
+  updateSun();
+  districtWorld.update(camera, t);
+  Miniature.updateWater(t);
+  Miniature.updateLife(t, camera);
 
   ANIMATED.forEach((o) => {
     if (o.userData.wheel) {
@@ -2390,20 +2417,23 @@ function animate() {
   });
   // cargo ships steaming toward the port
   ships.forEach((s, i) => {
-    s.position.z += (i ? -1 : 1) * 6 * 0.16;
+    s.position.z += (reducedMotion.matches ? 0 : dt) * (i ? -1 : 1) * 57.6;
     if (s.position.z > 10000) s.position.z = -30000;
     if (s.position.z < -30000) s.position.z = 10000;
   });
 
   clouds.forEach((c, i) => {
-    c.position.x += 1.6 + (i % 3) * 0.5;
+    c.position.x += (reducedMotion.matches ? 0 : dt * 60) * (1.6 + (i % 3) * 0.5);
     if (c.position.x > TX1 + 3000) c.position.x = TX0 - 3000;
   });
 
   renderer.render(scene, camera);
   updateLabels();
+  Miniature.measureFrame(rawDt, renderer);
 }
 animate();
 </script>
+<script src="spatial.js"></script>
+<script src="welcome.js"></script>
 </body>
 </html>

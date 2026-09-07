@@ -114,6 +114,7 @@
     box-shadow: 0 2px 6px rgba(0,0,0,0.45); }
   @media (max-width: 640px) { #sidebar { width: 260px; } #toggle { left: 272px; } }
 </style>
+<link rel="stylesheet" href="spatial.css?v=miniature-1" />
 </head>
 <body>
 <div id="map"></div>
@@ -121,7 +122,7 @@
 <div id="sidebar">
   <header>
     <h1>Mangalore <span>Atlas</span> <small style="font-size:11px;color:var(--muted)">v2 · MapLibre</small></h1>
-    <div class="sub">Real map tiles + 3D extruded buildings &amp; terrain. Drag to pan, right-drag to tilt &amp; rotate.</div>
+    <div class="sub">Real map tiles + 3D buildings &amp; landmark models. Drag to pan, right-drag to tilt &amp; rotate.</div>
   </header>
   <input id="search" type="text" placeholder="Search landmarks…" />
   <div id="filters"></div>
@@ -403,8 +404,8 @@ const map = new maplibregl.Map({
   container: "map",
   style: "https://tiles.openfreemap.org/styles/liberty",
   center: CITY_CENTER,
-  zoom: 13.2,
-  pitch: 60,
+  zoom: 14.2,
+  pitch: 64,
   bearing: -15,
   antialias: true,
   maxPitch: 78,
@@ -419,6 +420,8 @@ map.on("load", () => {
   // is enabled (float32 matrix precision), so v2 keeps the ground flat and stable.
   map.setSky && map.setSky({ "sky-color": "#87ceeb", "horizon-color": "#f0e6d2", "fog-color": "#e8e0d8", "sky-horizon-blend": 0.6 });
 
+  map.setLight({ anchor: "map", color: "#fff0d6", intensity: 0.48, position: [1.5, 225, 48] });
+
   // fill-extrusion: turn OSM building polygons into 3D blocks
   const layers = map.getStyle().layers;
   const labelLayer = layers.find((l) => l.type === "symbol" && l.layout && l.layout["text-field"]);
@@ -428,15 +431,16 @@ map.on("load", () => {
       source: "openmaptiles",
       "source-layer": "building",
       type: "fill-extrusion",
-      minzoom: 14,
+      minzoom: 13,
       paint: {
         "fill-extrusion-color": [
           "interpolate", ["linear"], ["coalesce", ["get", "render_height"], 10],
-          0, "#d8cfc0", 25, "#c4b8a4", 60, "#a8988a",
+          0, "#ede4d3", 25, "#c8d2cc", 60, "#9aafb4",
         ],
         "fill-extrusion-height": ["coalesce", ["get", "render_height"], 10],
         "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
-        "fill-extrusion-opacity": 0.85,
+        "fill-extrusion-opacity": 1,
+        "fill-extrusion-vertical-gradient": true,
       },
     }, labelLayer && labelLayer.id);
   } catch (e) { console.warn("3D buildings unavailable:", e); }
@@ -1355,9 +1359,10 @@ const modelLayer = {
   onAdd(mapp, gl) {
     this.camera = new THREE.Camera();
     this.scene = new THREE.Scene();
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-    const sun = new THREE.DirectionalLight(0xfff2d9, 0.9);
-    sun.position.set(120, 200, 80);
+    this.skyLight = new THREE.HemisphereLight(0xd9ecff, 0x786752, 0.45);
+    this.scene.add(this.skyLight);
+    const sun = this.sun = new THREE.DirectionalLight(0xfff2d9, 1.15);
+    sun.position.set(-120, 200, 120);
     this.scene.add(sun);
     LANDMARKS.forEach((l, i) => {
       const builder = BUILDERS[l.model];
@@ -1420,7 +1425,10 @@ LANDMARKS.forEach((l, i) => {
   el.className = "marker";
   el.style.background = CATEGORIES[l.cat].color;
   const popup = new maplibregl.Popup({ offset: 16 });
-  popup.on("open", () => popup.setHTML(popupHTML(l, i)));
+  popup.on("open", () => {
+    popup.setHTML(popupHTML(l, i));
+    window.dispatchEvent(new CustomEvent('atlas:select', { detail: { id: i, name: l.name, lng: l.lng, lat: l.lat, category: l.cat } }));
+  });
   const marker = new maplibregl.Marker({ element: el })
     .setLngLat([l.lng, l.lat])
     .setPopup(popup)
@@ -1440,8 +1448,8 @@ function closeAllPopups() {
 }
 function flyToLandmark(idx, open = true) {
   const l = LANDMARKS[idx];
-  map.flyTo({ center: [l.lng, l.lat], zoom: 16.2, pitch: 62, bearing: ((idx * 53) % 90) - 45, duration: 2400, essential: true });
-  if (open) { closeAllPopups(); setTimeout(() => markers[idx].togglePopup(), 2300); }
+  map.flyTo({ center: [l.lng, l.lat], zoom: 16.2, pitch: 62, bearing: ((idx * 53) % 90) - 45, duration: 2400, essential: false });
+  if (open) { closeAllPopups(); markers[idx].getPopup().addTo(map); }
 }
 
 /* ==================== SIDEBAR ==================== */
@@ -1605,7 +1613,7 @@ function storyChapter(i) {
   if (li >= 0) {
     const l = LANDMARKS[li];
     closeAllPopups();
-    map.flyTo({ center: [l.lng, l.lat], zoom: 16.4, pitch: 64, bearing: (i * 63) % 360 - 180, duration: 3200, essential: true });
+    map.flyTo({ center: [l.lng, l.lat], zoom: 16.4, pitch: 64, bearing: (i * 63) % 360 - 180, duration: 3200, essential: false });
     // slow cinematic rotation once we arrive
     setTimeout(() => { if (storyOn && storyIdx === i) storySpin = setInterval(() => map.rotateTo(map.getBearing() + 0.06, { duration: 50 }), 50); }, 3300);
   }
@@ -1661,5 +1669,6 @@ toggleBtn.onclick = () => { sidebar.classList.toggle("hidden"); toggleBtn.classL
 
 refresh();
 </script>
+<script src="spatial.js"></script>
 </body>
 </html>
